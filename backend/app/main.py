@@ -13,7 +13,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title="TTB Label Verification API")
 
     allowed_origins = _split_env_list(
-        os.getenv("ALLOWED_ORIGINS", "http://localhost:5173")
+        os.getenv("ALLOWED_ORIGINS", "http://localhost:5173", "*")
     )
 
     app.add_middleware(
