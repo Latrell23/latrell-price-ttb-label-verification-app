@@ -1,6 +1,6 @@
 # TTB Label Verification
 
-Phase 0 scaffold for the TTB Label Verification proof-of-concept.
+Phase 1 scaffold for the TTB Label Verification proof-of-concept.
 
 ## Local Setup
 
@@ -26,12 +26,22 @@ python3 -m http.server 5173
 Open `http://localhost:5173`. The page should show the JSON response from
 `http://localhost:8000/health`.
 
-Run backend tests:
+Run all backend tests:
 
 ```bash
-cd backend
-source .venv/bin/activate
-PYTHONPATH=. pytest
+backend/.venv/bin/pytest
+```
+
+Run only the Phase 1 comparison engine tests:
+
+```bash
+backend/.venv/bin/pytest backend/tests/test_verification.py
+```
+
+Show the strict case-sensitive government warning test:
+
+```bash
+backend/.venv/bin/pytest backend/tests/test_verification.py -k government_warning_title_case_fails_strict_case_sensitive_comparison -vv
 ```
 
 ## Deploy
