@@ -37,6 +37,8 @@ def get_vision_service() -> Callable[[], VisionService]:
 def _resolve_vision_service(
     vision_service: VisionServiceDependency,
 ) -> VisionService:
+    if isinstance(vision_service, type):
+        return vision_service()
     if hasattr(vision_service, "extract_label"):
         return vision_service
     return vision_service()

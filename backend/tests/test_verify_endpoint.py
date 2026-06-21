@@ -161,6 +161,14 @@ def test_verify_success_returns_full_verification_result_and_calls_mock() -> Non
     assert warning["found"] == WARNING
 
 
+def test_verify_instantiates_vision_service_class_before_extracting() -> None:
+    response = call_verify(SpyVisionService)
+
+    status_code, body = response_status_and_body(response)
+    assert status_code == 200
+    assert body["overall_verdict"] == "APPROVED"
+
+
 def test_verify_mismatched_extracted_field_returns_needs_review() -> None:
     service = SpyVisionService(extracted_label(brand_name="Wrong Brand"))
 

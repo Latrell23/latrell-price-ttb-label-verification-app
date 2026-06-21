@@ -9,18 +9,108 @@
   <body>
     <main class="shell">
       <section class="panel" aria-labelledby="title">
-        <p class="eyebrow">Phase 0</p>
-        <h1 id="title">TTB Label Verification</h1>
-        <p class="summary">Backend connection check</p>
+        <header class="page-header">
+          <h1 id="title">TTB Label Verification</h1>
+          <p class="summary">
+            Choose a label image and enter the expected application information.
+          </p>
+        </header>
 
-        <div class="status-row">
-          <span id="status-dot" class="dot pending" aria-hidden="true"></span>
-          <span id="status-label">Checking API health...</span>
-        </div>
+        <form id="verification-form" novalidate>
+          <div id="form-error" class="form-error" role="alert" hidden></div>
 
-        <pre id="health-output" class="output">Waiting for response...</pre>
+          <section class="form-section" aria-labelledby="image-heading">
+            <h2 id="image-heading">Label Image</h2>
+            <label class="file-control" for="image">
+              <span class="file-label">Choose Label Image</span>
+              <input
+                id="image"
+                name="image"
+                type="file"
+                accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+              />
+            </label>
+            <p id="image-error" class="field-error" hidden></p>
+            <div id="image-preview-wrap" class="image-preview-wrap" hidden>
+              <p id="selected-file-name" class="selected-file-name"></p>
+              <img id="image-preview" alt="Selected label preview" />
+            </div>
+          </section>
 
-        <button id="retry-button" type="button">Check Again</button>
+          <section class="form-section" aria-labelledby="fields-heading">
+            <h2 id="fields-heading">Expected Application Information</h2>
+
+            <div class="field-grid">
+              <div class="field">
+                <label for="brand_name">Brand Name</label>
+                <input id="brand_name" name="brand_name" type="text" autocomplete="off" />
+                <p id="brand_name-error" class="field-error" hidden></p>
+              </div>
+
+              <div class="field">
+                <label for="class_type">Class / Type</label>
+                <input id="class_type" name="class_type" type="text" autocomplete="off" />
+                <p id="class_type-error" class="field-error" hidden></p>
+              </div>
+
+              <div class="field">
+                <label for="abv">Alcohol By Volume</label>
+                <input id="abv" name="abv" type="text" autocomplete="off" />
+                <p id="abv-error" class="field-error" hidden></p>
+              </div>
+
+              <div class="field">
+                <label for="net_contents">Net Contents</label>
+                <input id="net_contents" name="net_contents" type="text" autocomplete="off" />
+                <p id="net_contents-error" class="field-error" hidden></p>
+              </div>
+
+              <div class="field">
+                <label for="producer">Producer</label>
+                <input id="producer" name="producer" type="text" autocomplete="off" />
+                <p id="producer-error" class="field-error" hidden></p>
+              </div>
+
+              <div class="field">
+                <label for="country_of_origin">Country of Origin</label>
+                <input
+                  id="country_of_origin"
+                  name="country_of_origin"
+                  type="text"
+                  autocomplete="off"
+                />
+                <p id="country_of_origin-error" class="field-error" hidden></p>
+              </div>
+
+              <div class="field field-full">
+                <label for="government_warning">Government Warning</label>
+                <textarea id="government_warning" name="government_warning" rows="5"></textarea>
+                <p id="government_warning-error" class="field-error" hidden></p>
+              </div>
+            </div>
+          </section>
+
+          <div id="loading-message" class="loading-message" role="status" hidden>
+            Reading the image and checking the fields. This may take a moment.
+          </div>
+
+          <button id="verify-button" class="primary-button" type="submit" disabled>
+            Verify Label
+          </button>
+        </form>
+
+        <section id="results-view" class="results-view" aria-labelledby="results-heading" hidden>
+          <div id="verdict-banner" class="verdict-banner">
+            <p class="verdict-label">Result</p>
+            <h2 id="results-heading"></h2>
+          </div>
+
+          <div id="result-list" class="result-list"></div>
+
+          <button id="reset-button" class="secondary-button" type="button">
+            Check Another Label
+          </button>
+        </section>
       </section>
     </main>
 
