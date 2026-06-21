@@ -9,10 +9,13 @@ import pytest
 
 from app.verification.models import ExtractedLabel
 from app.vision import (
+    DEFAULT_VISION_MODEL,
     FakeVisionService,
+    GeminiVisionService,
     ImagePreprocessor,
     OpenAIVisionService,
     VisionAPIError,
+    VisionConfigurationError,
     VisionImageValidationError,
     VisionParseError,
 )
@@ -45,6 +48,24 @@ class FakeClient:
         self.responses = FakeResponses(response, exception)
 
 
+class FakeGeminiModels:
+    def __init__(self, response: Any | None = None, exception: Exception | None = None):
+        self.response = response
+        self.exception = exception
+        self.calls: list[dict[str, Any]] = []
+
+    def generate_content(self, **kwargs: Any) -> Any:
+        self.calls.append(kwargs)
+        if self.exception is not None:
+            raise self.exception
+        return self.response
+
+
+class FakeGeminiClient:
+    def __init__(self, response: Any | None = None, exception: Exception | None = None):
+        self.models = FakeGeminiModels(response, exception)
+
+
 def label(**overrides: Any) -> ExtractedLabel:
     data = {
         "brand_name": "Acme Estate",
@@ -74,6 +95,99 @@ def image_bytes(size: tuple[int, int] = (320, 240), mode: str = "RGB") -> bytes:
 
 def response_with(parsed: Any) -> SimpleNamespace:
     return SimpleNamespace(output_parsed=parsed, output=[])
+
+
+def gemini_response(parsed: Any | None = None, text: str | None = None) -> SimpleNamespace:
+    return SimpleNamespace(parsed=parsed, text=text)
+
+
+def test_gemini_service_returns_parsed_extracted_label() -> None:
+    expected = label()
+    client = FakeGeminiClient(gemini_response(parsed=expected))
+    service = GeminiVisionService(client=client)
+
+    actual = service.extract_label(image_bytes(), "image/png")
+
+    assert actual == expected
+
+
+def test_gemini_request_uses_default_model_json_schema_and_image_part() -> None:
+    client = FakeGeminiClient(gemini_response(parsed=label()))
+    service = GeminiVisionService(client=client)
+
+    service.extract_label(image_bytes(), "image/png")
+
+    call = client.models.calls[0]
+    assert call["model"] == "gemini-3.5-flash"
+    assert DEFAULT_VISION_MODEL == "gemini-3.5-flash"
+    assert call["config"]["response_mime_type"] == "application/json"
+    assert call["config"]["response_schema"] is ExtractedLabel
+    assert call["config"]["temperature"] == 0
+    image_part = call["contents"][0]
+    inline_data = (
+        image_part["inline_data"]
+        if isinstance(image_part, dict)
+        else getattr(image_part, "inline_data")
+    )
+    mime_type = (
+        inline_data["mime_type"]
+        if isinstance(inline_data, dict)
+        else getattr(inline_data, "mime_type")
+    )
+    data = inline_data["data"] if isinstance(inline_data, dict) else getattr(inline_data, "data")
+    assert mime_type == "image/jpeg"
+    assert data
+    assert call["contents"][1].startswith("Extract TTB alcohol label information")
+
+
+def test_gemini_model_env_overrides_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-test")
+    service = GeminiVisionService(client=FakeGeminiClient(gemini_response(parsed=label())))
+
+    assert service.model == "gemini-test"
+
+
+def test_gemini_service_parses_json_text_response() -> None:
+    expected = label()
+    client = FakeGeminiClient(gemini_response(text=expected.model_dump_json()))
+    service = GeminiVisionService(client=client)
+
+    actual = service.extract_label(image_bytes(), "image/png")
+
+    assert actual == expected
+
+
+def test_gemini_invalid_json_raises_parse_error() -> None:
+    service = GeminiVisionService(client=FakeGeminiClient(gemini_response(text="not json")))
+
+    with pytest.raises(VisionParseError):
+        service.extract_label(image_bytes())
+
+
+def test_gemini_malformed_structured_output_raises_parse_error() -> None:
+    service = GeminiVisionService(
+        client=FakeGeminiClient(gemini_response(parsed={"brand_name": "Acme"}))
+    )
+
+    with pytest.raises(VisionParseError):
+        service.extract_label(image_bytes())
+
+
+def test_gemini_sdk_exception_translates_to_api_error() -> None:
+    service = GeminiVisionService(client=FakeGeminiClient(exception=RuntimeError("quota")))
+
+    with pytest.raises(VisionAPIError):
+        service.extract_label(image_bytes())
+
+
+def test_gemini_missing_key_raises_configuration_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+
+    with pytest.raises(VisionConfigurationError):
+        GeminiVisionService()
 
 
 def test_openai_service_returns_parsed_extracted_label() -> None:

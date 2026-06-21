@@ -11,7 +11,7 @@ from app.vision import (
     DEFAULT_TIMEOUT_SECONDS,
     DEFAULT_VISION_MODEL,
     FakeVisionService,
-    OpenAIVisionService,
+    GeminiVisionService,
 )
 
 
@@ -27,7 +27,7 @@ SAMPLE_WARNING = (
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Run OpenAIVisionService against a label image. If no image path is "
+            "Run GeminiVisionService against a label image. If no image path is "
             "provided, a sample label image is generated under /tmp."
         )
     )
@@ -35,7 +35,7 @@ def main() -> int:
     parser.add_argument(
         "--mock",
         action="store_true",
-        help="Use deterministic mock extraction data instead of calling OpenAI",
+        help="Use deterministic mock extraction data instead of calling Gemini",
     )
     parser.add_argument("--model", default=DEFAULT_VISION_MODEL)
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_SECONDS)
@@ -45,7 +45,7 @@ def main() -> int:
     service = (
         FakeVisionService()
         if args.mock
-        else OpenAIVisionService(model=args.model, timeout_seconds=args.timeout)
+        else GeminiVisionService(model=args.model, timeout_seconds=args.timeout)
     )
     label = service.extract_label(image_path.read_bytes(), _content_type_for(image_path))
     print(json.dumps(label.model_dump(), indent=2, sort_keys=True))

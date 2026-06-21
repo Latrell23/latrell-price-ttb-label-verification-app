@@ -12,5 +12,7 @@ services:
         value: production
       - key: ALLOWED_ORIGINS
         sync: false
-      - key: VISION_MODEL_API_KEY
+      - key: GEMINI_API_KEY
         sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash
