@@ -1,4 +1,5 @@
 import base64
+import json
 import os
 from dataclasses import dataclass
 from io import BytesIO
@@ -9,7 +10,7 @@ from pydantic import ValidationError
 from app.verification.models import ExtractedLabel
 
 
-DEFAULT_VISION_MODEL = "gpt-5.5"
+DEFAULT_VISION_MODEL = "gemini-3.5-flash"
 DEFAULT_TIMEOUT_SECONDS = 5.0
 DEFAULT_MAX_IMAGE_EDGE = 2048
 DEFAULT_JPEG_QUALITY = 85
@@ -67,6 +68,15 @@ class ResponsesParseProtocol(Protocol):
 
 class OpenAIClientProtocol(Protocol):
     responses: ResponsesParseProtocol
+
+
+class GeminiModelsProtocol(Protocol):
+    def generate_content(self, **kwargs: Any) -> Any:
+        """Subset of the Gemini generate_content client used by this service."""
+
+
+class GeminiClientProtocol(Protocol):
+    models: GeminiModelsProtocol
 
 
 @dataclass(frozen=True)
@@ -203,6 +213,86 @@ class OpenAIVisionService:
         return OpenAI(api_key=resolved_api_key, timeout=timeout_seconds)
 
 
+class GeminiVisionService:
+    def __init__(
+        self,
+        client: GeminiClientProtocol | None = None,
+        *,
+        api_key: str | None = None,
+        model: str | None = None,
+        timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+        preprocessor: ImagePreprocessor | None = None,
+    ) -> None:
+        self.model = model or os.getenv("GEMINI_MODEL") or DEFAULT_VISION_MODEL
+        self.timeout_seconds = timeout_seconds
+        self.preprocessor = preprocessor or ImagePreprocessor()
+        self.client = client or self._build_client(api_key)
+
+    def extract_label(
+        self, image_bytes: bytes, content_type: str | None = None
+    ) -> ExtractedLabel:
+        processed = self.preprocessor.process(image_bytes, content_type)
+
+        try:
+            response = self.client.models.generate_content(
+                model=self.model,
+                contents=[
+                    self._image_part(processed),
+                    VISION_PROMPT,
+                ],
+                config={
+                    "response_mime_type": "application/json",
+                    "response_schema": ExtractedLabel,
+                    "temperature": 0,
+                },
+            )
+        except ValidationError as exc:
+            raise VisionParseError("Structured output failed validation") from exc
+        except (ValueError, TypeError, json.JSONDecodeError) as exc:
+            raise VisionParseError("Structured output could not be parsed") from exc
+        except TimeoutError as exc:
+            raise VisionAPIError("Gemini model request timed out") from exc
+        except Exception as exc:
+            raise VisionAPIError("Gemini model request failed") from exc
+
+        return _extract_gemini_label(response)
+
+    @staticmethod
+    def _build_client(api_key: str | None) -> GeminiClientProtocol:
+        resolved_api_key = (
+            api_key
+            or os.getenv("GEMINI_API_KEY")
+            or os.getenv("GOOGLE_API_KEY")
+        )
+        if not resolved_api_key:
+            raise VisionConfigurationError(
+                "Set GEMINI_API_KEY to use GeminiVisionService"
+            )
+
+        try:
+            from google import genai
+        except ImportError as exc:  # pragma: no cover - dependency guard
+            raise VisionConfigurationError("google-genai is required for GeminiVisionService") from exc
+
+        return genai.Client(api_key=resolved_api_key)
+
+    @staticmethod
+    def _image_part(processed: ProcessedImage) -> Any:
+        try:
+            from google.genai import types
+        except ImportError:
+            return {
+                "inline_data": {
+                    "mime_type": processed.content_type,
+                    "data": base64.b64encode(processed.data).decode("ascii"),
+                }
+            }
+        return types.Part.from_bytes(
+            data=processed.data,
+            mime_type=processed.content_type,
+        )
+
+
 class FakeVisionService:
     def __init__(self, label: ExtractedLabel | None = None) -> None:
         self.label = label or ExtractedLabel(
@@ -251,6 +341,29 @@ def _extract_parsed_label(response: Any) -> ExtractedLabel:
         return parsed
     try:
         return ExtractedLabel.model_validate(parsed)
+    except ValidationError as exc:
+        raise VisionParseError("Parsed output does not match ExtractedLabel") from exc
+
+
+def _extract_gemini_label(response: Any) -> ExtractedLabel:
+    parsed = _get_value(response, "parsed")
+    if parsed is not None:
+        if isinstance(parsed, ExtractedLabel):
+            return parsed
+        try:
+            return ExtractedLabel.model_validate(parsed)
+        except ValidationError as exc:
+            raise VisionParseError("Parsed output does not match ExtractedLabel") from exc
+
+    text = _get_value(response, "text")
+    if not text:
+        raise VisionParseError("Gemini response did not include text output")
+
+    try:
+        decoded = json.loads(text)
+        return ExtractedLabel.model_validate(decoded)
+    except json.JSONDecodeError as exc:
+        raise VisionParseError("Gemini response text was not valid JSON") from exc
     except ValidationError as exc:
         raise VisionParseError("Parsed output does not match ExtractedLabel") from exc
 

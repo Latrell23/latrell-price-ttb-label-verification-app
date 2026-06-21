@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 
 from app.verification import ApplicationData, VerificationResult, verify_label
 from app.vision import (
-    OpenAIVisionService,
+    GeminiVisionService,
     VisionAPIError,
     VisionConfigurationError,
     VisionImageValidationError,
@@ -31,7 +31,7 @@ def _split_env_list(value: str) -> list[str]:
 
 
 def get_vision_service() -> Callable[[], VisionService]:
-    return OpenAIVisionService
+    return GeminiVisionService
 
 
 def _resolve_vision_service(

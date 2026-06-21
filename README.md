@@ -13,6 +13,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 export APP_ENV=local
 export ALLOWED_ORIGINS=http://localhost:5173
+export GEMINI_API_KEY=<your Gemini API key>
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
@@ -63,10 +64,10 @@ mock extraction data:
 backend/.venv/bin/python backend/scripts/run_vision_sample.py --mock
 ```
 
-Or call the real OpenAI vision service by setting an API key:
+Or call the real Gemini vision service by setting an API key:
 
 ```bash
-export OPENAI_API_KEY=<real key>
+export GEMINI_API_KEY=<your Gemini API key>
 backend/.venv/bin/python backend/scripts/run_vision_sample.py
 ```
 
@@ -90,8 +91,9 @@ Backend on Render:
    - Plan: Free
 4. Add environment variables in Render:
    - `APP_ENV=production`
-   - `ALLOWED_ORIGINS=https://YOUR-VERCEL-APP.vercel.app`
-   - `VISION_MODEL_API_KEY=<real key later>`
+   - `ALLOWED_ORIGINS=http://localhost:5173` for local frontend testing
+   - `GEMINI_API_KEY=<your Gemini API key>`
+   - `GEMINI_MODEL=gemini-3.5-flash`
 
 Frontend on Vercel:
 
