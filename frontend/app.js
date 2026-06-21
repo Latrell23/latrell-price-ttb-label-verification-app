@@ -54,12 +54,8 @@
     return imageInput.files && imageInput.files.length > 0;
   }
 
-  function allFieldsFilled() {
-    return fields.every((field) => fieldElement(field.name).value.trim() !== "");
-  }
-
   function refreshSubmitState() {
-    verifyButton.disabled = !hasImage() || !allFieldsFilled();
+    verifyButton.disabled = false;
   }
 
   function clearFieldError(name) {
@@ -102,6 +98,24 @@
     element.setAttribute("aria-describedby", error.id);
     error.textContent = message;
     error.hidden = false;
+  }
+
+  function validateRequiredInputs() {
+    let isValid = true;
+
+    if (!hasImage()) {
+      showFieldError("image", "Choose one label image.");
+      isValid = false;
+    }
+
+    fields.forEach((field) => {
+      if (fieldElement(field.name).value.trim() === "") {
+        showFieldError(field.name, "Complete this field.");
+        isValid = false;
+      }
+    });
+
+    return isValid;
   }
 
   function setLoading(isLoading) {
@@ -238,20 +252,7 @@
     resultsView.hidden = true;
     resultList.innerHTML = "";
 
-    if (!hasImage()) {
-      showFormError(errorMessages.missing_image);
-      showFieldError("image", errorMessages.missing_image);
-      refreshSubmitState();
-      return;
-    }
-
-    fields.forEach((field) => {
-      if (fieldElement(field.name).value.trim() === "") {
-        showFieldError(field.name, "Complete this field.");
-      }
-    });
-
-    if (!allFieldsFilled()) {
+    if (!validateRequiredInputs()) {
       showFormError("Complete the highlighted fields.");
       refreshSubmitState();
       return;
