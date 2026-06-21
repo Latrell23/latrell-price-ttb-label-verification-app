@@ -1,0 +1,278 @@
+from io import BytesIO
+import json
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
+
+import pytest
+
+from app.verification.models import ExtractedLabel
+from app.vision import (
+    FakeVisionService,
+    ImagePreprocessor,
+    OpenAIVisionService,
+    VisionAPIError,
+    VisionImageValidationError,
+    VisionParseError,
+)
+
+
+WARNING = (
+    "GOVERNMENT WARNING: (1) ACCORDING TO THE SURGEON GENERAL, WOMEN SHOULD "
+    "NOT DRINK ALCOHOLIC BEVERAGES DURING PREGNANCY BECAUSE OF THE RISK OF "
+    "BIRTH DEFECTS. (2) CONSUMPTION OF ALCOHOLIC BEVERAGES IMPAIRS YOUR "
+    "ABILITY TO DRIVE A CAR OR OPERATE MACHINERY, AND MAY CAUSE HEALTH "
+    "PROBLEMS."
+)
+
+
+class FakeResponses:
+    def __init__(self, response: Any | None = None, exception: Exception | None = None):
+        self.response = response
+        self.exception = exception
+        self.calls: list[dict[str, Any]] = []
+
+    def parse(self, **kwargs: Any) -> Any:
+        self.calls.append(kwargs)
+        if self.exception is not None:
+            raise self.exception
+        return self.response
+
+
+class FakeClient:
+    def __init__(self, response: Any | None = None, exception: Exception | None = None):
+        self.responses = FakeResponses(response, exception)
+
+
+def label(**overrides: Any) -> ExtractedLabel:
+    data = {
+        "brand_name": "Acme Estate",
+        "class_type": "Red Wine",
+        "abv": "13.5%",
+        "net_contents": "750 mL",
+        "producer": "Acme Cellars",
+        "country_of_origin": "United States",
+        "government_warning": WARNING,
+        "raw_text": "ACME ESTATE RED WINE ALC. 13.5% BY VOL. 750 mL",
+        "extraction_confidence": 0.98,
+    }
+    data.update(overrides)
+    return ExtractedLabel(**data)
+
+
+def image_bytes(size: tuple[int, int] = (320, 240), mode: str = "RGB") -> bytes:
+    from PIL import Image, ImageDraw
+
+    image = Image.new(mode, size, "white")
+    draw = ImageDraw.Draw(image)
+    draw.text((12, 12), "ACME ESTATE\nRED WINE\nALC. 13.5% BY VOL.", fill="black")
+    output = BytesIO()
+    image.save(output, format="PNG")
+    return output.getvalue()
+
+
+def response_with(parsed: Any) -> SimpleNamespace:
+    return SimpleNamespace(output_parsed=parsed, output=[])
+
+
+def test_openai_service_returns_parsed_extracted_label() -> None:
+    expected = label()
+    client = FakeClient(response_with(expected))
+    service = OpenAIVisionService(client=client)
+
+    actual = service.extract_label(image_bytes(), "image/png")
+
+    assert actual == expected
+
+
+def test_request_uses_structured_output_and_high_detail_image() -> None:
+    client = FakeClient(response_with(label()))
+    service = OpenAIVisionService(client=client, model="gpt-test", timeout_seconds=4.5)
+
+    service.extract_label(image_bytes(), "image/png")
+
+    call = client.responses.calls[0]
+    assert call["model"] == "gpt-test"
+    assert call["text_format"] is ExtractedLabel
+    assert call["reasoning"] == {"effort": "low"}
+    assert call["text"] == {"verbosity": "low"}
+    assert call["timeout"] == 4.5
+    image_part = call["input"][1]["content"][1]
+    assert image_part["type"] == "input_image"
+    assert image_part["detail"] == "high"
+    assert image_part["image_url"].startswith("data:image/jpeg;base64,")
+
+
+def test_unknown_fields_remain_none() -> None:
+    expected = label(producer=None, country_of_origin=None)
+    service = OpenAIVisionService(client=FakeClient(response_with(expected)))
+
+    actual = service.extract_label(image_bytes())
+
+    assert actual.producer is None
+    assert actual.country_of_origin is None
+
+
+def test_government_warning_is_preserved_verbatim() -> None:
+    service = OpenAIVisionService(client=FakeClient(response_with(label())))
+
+    actual = service.extract_label(image_bytes())
+
+    assert actual.government_warning == WARNING
+
+
+def test_incomplete_government_warning_can_return_none() -> None:
+    service = OpenAIVisionService(
+        client=FakeClient(response_with(label(government_warning=None)))
+    )
+
+    actual = service.extract_label(image_bytes())
+
+    assert actual.government_warning is None
+
+
+def test_partial_blurry_response_returns_partial_label() -> None:
+    partial = label(
+        class_type=None,
+        producer=None,
+        government_warning=None,
+        extraction_confidence=0.36,
+    )
+    service = OpenAIVisionService(client=FakeClient(response_with(partial)))
+
+    actual = service.extract_label(image_bytes())
+
+    assert actual.brand_name == "Acme Estate"
+    assert actual.class_type is None
+    assert actual.extraction_confidence == 0.36
+
+
+def test_non_label_image_returns_null_fields_and_low_confidence() -> None:
+    non_label = ExtractedLabel(
+        brand_name=None,
+        class_type=None,
+        abv=None,
+        net_contents=None,
+        producer=None,
+        country_of_origin=None,
+        government_warning=None,
+        raw_text=None,
+        extraction_confidence=0.0,
+    )
+    service = OpenAIVisionService(client=FakeClient(response_with(non_label)))
+
+    actual = service.extract_label(image_bytes())
+
+    assert actual.brand_name is None
+    assert actual.government_warning is None
+    assert actual.extraction_confidence == 0.0
+
+
+def test_preprocessor_downscales_converts_to_jpeg_and_preserves_aspect_ratio() -> None:
+    processed = ImagePreprocessor(max_long_edge=2048).process(image_bytes((4096, 2048)))
+
+    assert processed.content_type == "image/jpeg"
+    assert processed.width == 2048
+    assert processed.height == 1024
+    assert processed.data[:2] == b"\xff\xd8"
+
+
+def test_preprocessor_does_not_upscale_small_images() -> None:
+    processed = ImagePreprocessor(max_long_edge=2048).process(image_bytes((300, 200)))
+
+    assert processed.width == 300
+    assert processed.height == 200
+
+
+def test_invalid_image_bytes_raise_validation_error_without_api_call() -> None:
+    client = FakeClient(response_with(label()))
+    service = OpenAIVisionService(client=client)
+
+    with pytest.raises(VisionImageValidationError):
+        service.extract_label(b"not an image")
+
+    assert client.responses.calls == []
+
+
+def test_api_timeout_translates_to_service_exception() -> None:
+    service = OpenAIVisionService(client=FakeClient(exception=TimeoutError("slow")))
+
+    with pytest.raises(VisionAPIError):
+        service.extract_label(image_bytes())
+
+
+def test_sdk_exception_translates_to_service_exception() -> None:
+    service = OpenAIVisionService(client=FakeClient(exception=RuntimeError("boom")))
+
+    with pytest.raises(VisionAPIError):
+        service.extract_label(image_bytes())
+
+
+def test_missing_parsed_output_raises_parse_error() -> None:
+    service = OpenAIVisionService(client=FakeClient(SimpleNamespace(output=[])))
+
+    with pytest.raises(VisionParseError):
+        service.extract_label(image_bytes())
+
+
+def test_refusal_content_raises_parse_error() -> None:
+    response = SimpleNamespace(
+        output=[
+            SimpleNamespace(
+                content=[
+                    SimpleNamespace(
+                        type="refusal",
+                        refusal="I cannot extract this image.",
+                    )
+                ]
+            )
+        ]
+    )
+    service = OpenAIVisionService(client=FakeClient(response))
+
+    with pytest.raises(VisionParseError):
+        service.extract_label(image_bytes())
+
+
+def test_malformed_structured_output_raises_parse_error() -> None:
+    malformed = {"brand_name": "Acme Estate"}
+    service = OpenAIVisionService(client=FakeClient(response_with(malformed)))
+
+    with pytest.raises(VisionParseError):
+        service.extract_label(image_bytes())
+
+
+def test_fake_vision_service_is_mockable_without_client() -> None:
+    fake = FakeVisionService(label(brand_name="Fixture Brand"))
+
+    actual = fake.extract_label(b"bytes", "image/png")
+
+    assert actual.brand_name == "Fixture Brand"
+    assert fake.calls == [(b"bytes", "image/png")]
+
+
+def test_sample_script_mock_mode_returns_populated_label(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    scripts_dir = Path(__file__).resolve().parents[1] / "scripts"
+    sys.path.insert(0, str(scripts_dir))
+    try:
+        import run_vision_sample
+
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["run_vision_sample.py", "--mock"],
+        )
+
+        exit_code = run_vision_sample.main()
+    finally:
+        sys.path.remove(str(scripts_dir))
+
+    output = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert output["brand_name"] == "Acme Estate"
+    assert output["government_warning"].startswith("GOVERNMENT WARNING:")
+    assert output["extraction_confidence"] > 0

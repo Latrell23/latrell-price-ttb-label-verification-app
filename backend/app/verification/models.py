@@ -32,8 +32,8 @@ class ExtractedLabel(BaseModel):
     producer: str | None
     country_of_origin: str | None
     government_warning: str | None
-    raw_text: str | None = None
-    extraction_confidence: float | None = None
+    raw_text: str | None
+    extraction_confidence: float | None
 
 
 class FieldResult(BaseModel):

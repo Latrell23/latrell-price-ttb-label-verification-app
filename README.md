@@ -44,6 +44,26 @@ Show the strict case-sensitive government warning test:
 backend/.venv/bin/pytest backend/tests/test_verification.py -k government_warning_title_case_fails_strict_case_sensitive_comparison -vv
 ```
 
+Run the Phase 2 vision sample script against a generated label image with
+mock extraction data:
+
+```bash
+backend/.venv/bin/python backend/scripts/run_vision_sample.py --mock
+```
+
+Or call the real OpenAI vision service by setting an API key:
+
+```bash
+export OPENAI_API_KEY=<real key>
+backend/.venv/bin/python backend/scripts/run_vision_sample.py
+```
+
+You can also pass an existing image:
+
+```bash
+backend/.venv/bin/python backend/scripts/run_vision_sample.py /path/to/label.jpg
+```
+
 ## Deploy
 
 Backend on Render:
