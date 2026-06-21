@@ -1,6 +1,6 @@
 # TTB Label Verification
 
-Phase 1 scaffold for the TTB Label Verification proof-of-concept.
+Proof-of-concept for TTB label verification.
 
 ## Local Setup
 
@@ -23,8 +23,20 @@ cd frontend
 python3 -m http.server 5173
 ```
 
-Open `http://localhost:5173`. The page should show the JSON response from
-`http://localhost:8000/health`.
+Open `http://localhost:5173`. The page should show the single-label
+verification form.
+
+The frontend reads its backend URL from `frontend/config.js`. For local
+development against the deployed Render backend, keep:
+
+```js
+window.APP_CONFIG = {
+  API_BASE_URL: "https://latrell-price-ttb-label-verification-app.onrender.com",
+};
+```
+
+To point the same static frontend at another backend later, change only
+`API_BASE_URL`.
 
 Run all backend tests:
 
@@ -94,11 +106,12 @@ that exact URL and redeploy/restart the backend.
 
 ## Exit Check
 
-1. Open `https://YOUR-RENDER-SERVICE.onrender.com/health`.
-2. Confirm it returns JSON with `"status": "ok"`.
-3. Open the Vercel frontend URL.
-4. Confirm the page says `API health response received` and displays the same
-   health JSON.
+1. Open `http://localhost:5173`.
+2. Choose a JPG, PNG, or WebP label image.
+3. Fill in all seven expected application fields.
+4. Press `Verify Label`.
+5. Confirm the page shows `APPROVED` or `NEEDS REVIEW` plus one PASS/FAIL row
+   per field.
 
 Render Free services spin down after idle time, so the first request after idle
 can be slow. Warm the backend URL before demos.
