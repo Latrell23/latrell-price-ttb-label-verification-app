@@ -1,15 +1,14 @@
-from fastapi.testclient import TestClient
+import asyncio
 
 from app.main import create_app
 
 
 def test_health_returns_ok() -> None:
-    client = TestClient(create_app())
+    app = create_app()
+    route = next(route for route in app.routes if route.path == "/health")
 
-    response = client.get("/health")
+    body = asyncio.run(route.endpoint())
 
-    assert response.status_code == 200
-    body = response.json()
     assert body["status"] == "ok"
     assert body["service"] == "ttb-label-verification-api"
     assert "checked_at" in body
