@@ -25,6 +25,7 @@ SAMPLE_WARNING = (
 
 
 def main() -> int:
+    """Run a sample label extraction against a generated or provided image."""
     parser = argparse.ArgumentParser(
         description=(
             "Run GeminiVisionService against a label image. If no image path is "
@@ -41,18 +42,22 @@ def main() -> int:
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_SECONDS)
     args = parser.parse_args()
 
+    # Choose the input image and matching real or fake vision service.
     image_path = Path(args.image_path) if args.image_path else _create_sample_image()
     service = (
         FakeVisionService()
         if args.mock
         else GeminiVisionService(model=args.model, timeout_seconds=args.timeout)
     )
+
+    # Extract the label and print a stable JSON payload for inspection.
     label = service.extract_label(image_path.read_bytes(), _content_type_for(image_path))
     print(json.dumps(label.model_dump(), indent=2, sort_keys=True))
     return 0
 
 
 def _create_sample_image() -> Path:
+    """Create a local sample label image and return its path."""
     try:
         from PIL import Image, ImageDraw, ImageFont
     except ImportError as exc:
@@ -65,6 +70,7 @@ def _create_sample_image() -> Path:
     font_medium = _font(ImageFont, 44)
     font_small = _font(ImageFont, 30)
 
+    # Draw the core label fields near the top of the sample image.
     y = 90
     for text, font, spacing in [
         ("ACME ESTATE", font_large, 110),
@@ -77,6 +83,7 @@ def _create_sample_image() -> Path:
         _center(draw, text, y, image.width, font)
         y += spacing
 
+    # Wrap and draw the government warning below the product details.
     warning_lines = _wrap(SAMPLE_WARNING, 58)
     y += 40
     for line in warning_lines:
@@ -88,6 +95,7 @@ def _create_sample_image() -> Path:
 
 
 def _font(image_font_module, size: int):
+    """Return a TrueType font when available or the Pillow default font."""
     try:
         return image_font_module.truetype("DejaVuSans.ttf", size=size)
     except OSError:
@@ -95,15 +103,19 @@ def _font(image_font_module, size: int):
 
 
 def _center(draw, text: str, y: int, width: int, font) -> None:
+    """Draw one line of text centered at the provided y coordinate."""
     bbox = draw.textbbox((0, y), text, font=font)
     x = (width - (bbox[2] - bbox[0])) // 2
     draw.text((x, y), text, fill="black", font=font)
 
 
 def _wrap(text: str, max_chars: int) -> list[str]:
+    """Wrap text into lines no longer than the requested character count."""
     words = text.split()
     lines: list[str] = []
     current: list[str] = []
+
+    # Build lines one word at a time without splitting words.
     for word in words:
         proposed = " ".join([*current, word])
         if current and len(proposed) > max_chars:
@@ -117,6 +129,7 @@ def _wrap(text: str, max_chars: int) -> list[str]:
 
 
 def _content_type_for(path: Path) -> str | None:
+    """Return the image content type implied by a file suffix."""
     suffix = path.suffix.lower()
     if suffix in {".jpg", ".jpeg"}:
         return "image/jpeg"

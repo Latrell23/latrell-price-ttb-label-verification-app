@@ -15,6 +15,8 @@ MatchType = Literal[
 
 
 class ApplicationData(BaseModel):
+    """Application-submitted label values expected to appear on the image."""
+
     brand_name: str
     class_type: str
     abv: str
@@ -25,6 +27,8 @@ class ApplicationData(BaseModel):
 
 
 class ExtractedLabel(BaseModel):
+    """Vision-extracted label values read from the uploaded image."""
+
     brand_name: str | None
     class_type: str | None
     abv: str | None
@@ -37,6 +41,8 @@ class ExtractedLabel(BaseModel):
 
 
 class FieldResult(BaseModel):
+    """Result of comparing one application field with one extracted field."""
+
     field: str
     match_type: MatchType
     expected: str
@@ -45,11 +51,15 @@ class FieldResult(BaseModel):
 
 
 class VerificationResult(BaseModel):
+    """Single-label verification result returned by the API."""
+
     results: list[FieldResult]
     overall_verdict: OverallVerdict
     latency_ms: float
 
 
 class BatchResult(BaseModel):
+    """Batch verification result with item details and aggregate counts."""
+
     items: list[VerificationResult]
     summary: dict[str, int]
