@@ -411,23 +411,73 @@
       control.disabled = isLoading;
     });
 
+    if (isLoading) {
+      batchSubmitButton.textContent = "Checking Batch...";
+      startBatchProgress(total);
+    } else {
+      batchSubmitButton.textContent = "Verify Batch";
+      stopBatchProgress();
+      updateBatchAddButton();
+    }
+  }
+
+  function renderBatchProgress(total, completed, percent, message) {
+    batchLoadingMessage.innerHTML = "";
+
+    const progressHeader = document.createElement("div");
+    progressHeader.className = "progress-header";
+
+    const progressText = document.createElement("span");
+    progressText.textContent = message;
+
+    const progressCount = document.createElement("strong");
+    progressCount.textContent = `${completed} of ${total}`;
+
+    const progressTrack = document.createElement("div");
+    progressTrack.className = "progress-track";
+    progressTrack.setAttribute("aria-hidden", "true");
+
+    const progressFill = document.createElement("div");
+    progressFill.className = "progress-fill";
+    progressFill.style.width = `${percent}%`;
+
+    progressHeader.append(progressText, progressCount);
+    progressTrack.append(progressFill);
+    batchLoadingMessage.append(progressHeader, progressTrack);
+  }
+
+  function startBatchProgress(total) {
+    stopBatchProgress();
+    batchLoadingMessage.hidden = true;
+
+    batchProgressTimer = window.setTimeout(() => {
+      batchLoadingMessage.hidden = false;
+      renderBatchProgress(total, 0, 0, "Sending labels...");
+    }, 500);
+  }
+
+  function updateBatchProgress(total, completed, message) {
     if (batchProgressTimer) {
       window.clearTimeout(batchProgressTimer);
       batchProgressTimer = null;
     }
 
-    if (isLoading) {
-      batchSubmitButton.textContent = "Checking Batch...";
-      batchLoadingMessage.hidden = true;
-      batchProgressTimer = window.setTimeout(() => {
-        batchLoadingMessage.textContent = `Checking 0 of ${total} labels...`;
-        batchLoadingMessage.hidden = false;
-      }, 500);
-    } else {
-      batchSubmitButton.textContent = "Verify Batch";
-      batchLoadingMessage.hidden = true;
-      updateBatchAddButton();
+    batchLoadingMessage.hidden = false;
+    const percent = total > 0 ? Math.round((completed / total) * 100) : 100;
+    renderBatchProgress(total, completed, percent, message);
+  }
+
+  function finishBatchProgress(total) {
+    updateBatchProgress(total, total, "Batch complete.");
+  }
+
+  function stopBatchProgress() {
+    if (batchProgressTimer) {
+      window.clearTimeout(batchProgressTimer);
+      batchProgressTimer = null;
     }
+    batchLoadingMessage.hidden = true;
+    batchLoadingMessage.innerHTML = "";
   }
 
   function updateMode(mode) {
@@ -438,8 +488,17 @@
     batchTab.setAttribute("aria-selected", String(isBatch));
     form.hidden = isBatch;
     batchForm.hidden = !isBatch;
+    form.toggleAttribute("hidden", isBatch);
+    batchForm.toggleAttribute("hidden", !isBatch);
     resultsView.hidden = true;
     resultList.innerHTML = "";
+
+    if (isBatch) {
+      const firstBatchImage = batchRows[0] ? rowField(batchRows[0], "image") : null;
+      if (firstBatchImage) {
+        firstBatchImage.focus({ preventScroll: true });
+      }
+    }
   }
 
   function updateBatchAddButton() {
@@ -666,6 +725,73 @@
     }
   }
 
+  async function readBatchStream(response, total, orderedClientIds) {
+    if (!response.body) {
+      throw new Error("Streaming response is not available.");
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let summary = null;
+    let latencyMs = 0;
+    const items = [];
+    const order = new Map(orderedClientIds.map((clientId, index) => [clientId, index]));
+
+    function handleLine(line) {
+      if (!line.trim()) {
+        return;
+      }
+
+      const event = JSON.parse(line);
+      if (event.type === "item") {
+        items.push(event.item);
+        updateBatchProgress(
+          total,
+          event.progress.completed,
+          event.progress.completed === total ? "Finishing batch..." : "Checking labels..."
+        );
+      } else if (event.type === "complete") {
+        summary = event.summary;
+        latencyMs = event.latency_ms;
+        finishBatchProgress(total);
+      }
+    }
+
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+
+      let newlineIndex = buffer.indexOf("\n");
+      while (newlineIndex >= 0) {
+        handleLine(buffer.slice(0, newlineIndex));
+        buffer = buffer.slice(newlineIndex + 1);
+        newlineIndex = buffer.indexOf("\n");
+      }
+
+      if (done) {
+        if (buffer.trim()) {
+          handleLine(buffer);
+        }
+        break;
+      }
+    }
+
+    if (!summary) {
+      throw new Error("Batch stream ended before completion.");
+    }
+
+    items.sort((left, right) => {
+      return (order.get(left.client_id) || 0) - (order.get(right.client_id) || 0);
+    });
+
+    return {
+      items,
+      summary,
+      latency_ms: latencyMs,
+    };
+  }
+
   async function submitBatch(event) {
     event.preventDefault();
     clearBatchErrors();
@@ -680,18 +806,20 @@
     setBatchLoading(true, batchRows.length);
 
     try {
-      const response = await fetch(`${apiBaseUrl}/verify/batch`, {
+      const orderedClientIds = batchRows.map((row) => row.id);
+      const response = await fetch(`${apiBaseUrl}/verify/batch/stream`, {
         method: "POST",
         body: buildBatchFormData(),
-        headers: { Accept: "application/json" },
+        headers: { Accept: "application/x-ndjson" },
       });
-      const body = await parseResponseBody(response);
 
       if (!response.ok) {
+        const body = await parseResponseBody(response);
         applyBatchServerError(body);
         return;
       }
 
+      const body = await readBatchStream(response, batchRows.length, orderedClientIds);
       renderBatchResults(body);
     } catch (_error) {
       showBatchFormError(

@@ -7,7 +7,7 @@ from collections.abc import Callable
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.datastructures import UploadFile as StarletteUploadFile
 
 from app.responses import error_response
@@ -548,3 +548,138 @@ async def verify_batch_endpoint(
                 "failed_count": failed,
             },
         )
+
+
+@router.post("/verify/batch/stream", response_model=None)
+async def verify_batch_stream_endpoint(
+    request: Request,
+    items: str | None = Form(default=None),
+    vision_service: VisionServiceDependency = Depends(get_vision_service),
+):
+    """Stream batch verification item results as each concurrent item finishes."""
+    started_at = _now_counter()
+
+    batch_items, batch_error = _parse_batch_items(items)
+    if batch_error is not None:
+        return batch_error
+    assert batch_items is not None
+
+    form = await request.form()
+    uploads: dict[str, UploadFile] = {}
+    missing_uploads: list[dict[str, str]] = []
+    for item in batch_items:
+        upload = form.get(item["image_field"])
+        if not isinstance(upload, StarletteUploadFile):
+            missing_uploads.append(
+                {
+                    "field": item["image_field"],
+                    "message": "Upload one label image for this item.",
+                }
+            )
+        else:
+            uploads[item["image_field"]] = upload
+
+    if missing_uploads:
+        return error_response(
+            422,
+            "missing_upload_fields",
+            "One or more batch image uploads are missing.",
+            missing_uploads,
+        )
+
+    resolved_vision_service = resolve_vision_service(vision_service)
+
+    async def stream_results():
+        max_concurrency = _max_batch_concurrency()
+        semaphore = asyncio.Semaphore(max_concurrency)
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_concurrency)
+        completed_items = 0
+        failed_items = 0
+        item_results: list[BatchVerificationItem] = []
+
+        tasks = [
+            asyncio.create_task(
+                _verify_batch_item(
+                    item=item,
+                    upload=uploads[item["image_field"]],
+                    vision_service=resolved_vision_service,
+                    semaphore=semaphore,
+                    executor=executor,
+                )
+            )
+            for item in batch_items
+        ]
+
+        try:
+            for completed_task in asyncio.as_completed(tasks):
+                item_result = await completed_task
+                item_results.append(item_result)
+
+                if item_result.status == "completed":
+                    completed_items += 1
+                else:
+                    failed_items += 1
+
+                yield (
+                    json.dumps(
+                        {
+                            "type": "item",
+                            "item": item_result.model_dump(mode="json"),
+                            "progress": {
+                                "completed": len(item_results),
+                                "total": len(batch_items),
+                            },
+                        }
+                    )
+                    + "\n"
+                )
+
+            passed = sum(
+                item.status == "completed"
+                and item.result is not None
+                and item.result.overall_verdict == "APPROVED"
+                for item in item_results
+            )
+            needs_review = sum(
+                item.status == "completed"
+                and item.result is not None
+                and item.result.overall_verdict == "NEEDS_REVIEW"
+                for item in item_results
+            )
+            summary = BatchVerificationSummary(
+                passed=passed,
+                needs_review=needs_review,
+                completed=passed + needs_review,
+                failed=failed_items,
+                total=len(item_results),
+            )
+            latency_ms = _now_ms_since(started_at)
+            LOGGER.info(
+                "verify_batch_stream_request_complete",
+                extra={
+                    "latency_ms": latency_ms,
+                    "over_budget": latency_ms > LATENCY_BUDGET_MS,
+                    "latency_budget_ms": LATENCY_BUDGET_MS,
+                    "status_code": 200,
+                    "item_count": len(item_results),
+                    "completed_count": completed_items,
+                    "failed_count": failed_items,
+                },
+            )
+            yield (
+                json.dumps(
+                    {
+                        "type": "complete",
+                        "summary": summary.model_dump(mode="json"),
+                        "latency_ms": latency_ms,
+                    }
+                )
+                + "\n"
+            )
+        finally:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            executor.shutdown(wait=False, cancel_futures=True)
+
+    return StreamingResponse(stream_results(), media_type="application/x-ndjson")

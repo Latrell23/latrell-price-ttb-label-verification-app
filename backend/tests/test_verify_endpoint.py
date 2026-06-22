@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from starlette.datastructures import Headers, UploadFile
 
 from app.main import create_app
-from app.routes.verify import verify_batch_endpoint
+from app.routes.verify import verify_batch_endpoint, verify_batch_stream_endpoint
 from app.verification.models import ExtractedLabel, VerificationResult
 from app.vision import (
     VisionAPIError,
@@ -193,6 +193,28 @@ def post_batch(
     )
     status_code, body = response_status_and_body(result)
     return SimpleNamespace(status_code=status_code, json=lambda: body)
+
+
+def collect_batch_stream(
+    service: SequenceVisionService,
+    items: list[dict[str, str]],
+    files: dict[str, UploadFile] | None = None,
+) -> list[dict]:
+    async def run_stream() -> list[dict]:
+        response = await verify_batch_stream_endpoint(
+            request=FakeBatchRequest(files if files is not None else batch_files(len(items))),
+            items=json.dumps(items),
+            vision_service=service,
+        )
+        events = []
+        async for chunk in response.body_iterator:
+            text = chunk.decode() if isinstance(chunk, bytes) else chunk
+            events.extend(json.loads(line) for line in text.splitlines() if line)
+        return events
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    return loop.run_until_complete(run_stream())
 
 
 def response_status_and_body(response) -> tuple[int, dict]:
@@ -635,3 +657,33 @@ def test_verify_batch_processes_three_labels_concurrently(monkeypatch) -> None:
     assert response.json()["summary"]["completed"] == 3
     assert len(service.calls) == 3
     assert latency_seconds < 0.45
+
+
+def test_verify_batch_stream_reports_real_item_progress(monkeypatch) -> None:
+    monkeypatch.setenv("MAX_BATCH_CONCURRENCY", "3")
+    service = SequenceVisionService(
+        [extracted_label(), extracted_label(), extracted_label()],
+        delay_seconds=0.05,
+    )
+
+    events = collect_batch_stream(service, batch_items(3), batch_files(3))
+
+    item_events = [event for event in events if event["type"] == "item"]
+    complete_event = next(event for event in events if event["type"] == "complete")
+    assert [event["progress"] for event in item_events] == [
+        {"completed": 1, "total": 3},
+        {"completed": 2, "total": 3},
+        {"completed": 3, "total": 3},
+    ]
+    assert [event["item"]["status"] for event in item_events] == [
+        "completed",
+        "completed",
+        "completed",
+    ]
+    assert complete_event["summary"] == {
+        "passed": 3,
+        "needs_review": 0,
+        "completed": 3,
+        "failed": 0,
+        "total": 3,
+    }
