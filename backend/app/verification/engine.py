@@ -56,7 +56,10 @@ UNIT_FACTORS_TO_ML = {
 def verify_label(
     application: ApplicationData, extracted: ExtractedLabel
 ) -> VerificationResult:
+    """Compare application fields with extracted label fields and return a verdict."""
     started_at = perf_counter()
+
+    # Run each field through the comparison rule required for that field.
     results = [
         _compare_fuzzy_field(application, extracted, "brand_name"),
         _compare_fuzzy_field(application, extracted, "class_type"),
@@ -69,11 +72,15 @@ def verify_label(
             extracted.government_warning,
         ),
     ]
+
+    # Approve only labels where every individual field passes.
     verdict = (
         "APPROVED"
         if all(result.status == "PASS" for result in results)
         else "NEEDS_REVIEW"
     )
+
+    # Include comparison latency without changing the response contract.
     latency_ms = (perf_counter() - started_at) * 1000
     return VerificationResult(
         results=results,
@@ -85,7 +92,11 @@ def verify_label(
 def verify_batch(
     pairs: list[tuple[ApplicationData, ExtractedLabel]]
 ) -> BatchResult:
+    """Verify multiple application and label pairs and summarize their outcomes."""
+    # Reuse single-label verification so batch behavior stays consistent.
     items = [verify_label(application, extracted) for application, extracted in pairs]
+
+    # Count final verdicts for the batch summary payload.
     passed = sum(item.overall_verdict == "APPROVED" for item in items)
     needs_review = sum(item.overall_verdict == "NEEDS_REVIEW" for item in items)
     return BatchResult(
@@ -103,12 +114,16 @@ def _compare_fuzzy_field(
     extracted: ExtractedLabel,
     field: str,
 ) -> FieldResult:
+    """Compare a text field using normalized fuzzy matching."""
     expected = getattr(application, field)
     found = getattr(extracted, field)
+
+    # Missing extracted values fail because there is nothing to compare.
     status = "FAIL"
     if found is not None:
         score = _fuzzy_score(_normalize_text(expected), _normalize_text(found))
         status = "PASS" if score >= FUZZY_THRESHOLD else "FAIL"
+
     return FieldResult(
         field=field,
         match_type="FUZZY",
@@ -119,6 +134,8 @@ def _compare_fuzzy_field(
 
 
 def _compare_country(expected: str, found: str | None) -> FieldResult:
+    """Compare countries after punctuation and synonym normalization."""
+    # Missing extracted countries fail because origin is a required label field.
     status = "FAIL"
     if found is not None:
         normalized_expected = _normalize_country(expected)
@@ -128,6 +145,7 @@ def _compare_country(expected: str, found: str | None) -> FieldResult:
             if _countries_match(normalized_expected, normalized_found)
             else "FAIL"
         )
+
     return FieldResult(
         field="country_of_origin",
         match_type="COUNTRY_SYNONYM",
@@ -138,6 +156,8 @@ def _compare_country(expected: str, found: str | None) -> FieldResult:
 
 
 def _compare_abv(expected: str, found: str | None) -> FieldResult:
+    """Compare ABV values numerically within the configured tolerance."""
+    # Parse numbers from both values before applying the tolerance check.
     expected_value = _parse_abv(expected)
     found_value = _parse_abv(found) if found is not None else None
     status = (
@@ -147,6 +167,7 @@ def _compare_abv(expected: str, found: str | None) -> FieldResult:
         and abs(expected_value - found_value) <= ABV_TOLERANCE
         else "FAIL"
     )
+
     return FieldResult(
         field="abv",
         match_type="NUMERIC_ABV",
@@ -157,6 +178,8 @@ def _compare_abv(expected: str, found: str | None) -> FieldResult:
 
 
 def _compare_net_contents(expected: str, found: str | None) -> FieldResult:
+    """Compare net contents after converting supported units to milliliters."""
+    # Convert both values into milliliters before applying the tolerance check.
     expected_ml = _parse_net_contents_ml(expected)
     found_ml = _parse_net_contents_ml(found) if found is not None else None
     status = (
@@ -166,6 +189,7 @@ def _compare_net_contents(expected: str, found: str | None) -> FieldResult:
         and abs(expected_ml - found_ml) <= NET_CONTENTS_TOLERANCE_ML
         else "FAIL"
     )
+
     return FieldResult(
         field="net_contents",
         match_type="UNIT_NORMALIZED",
@@ -176,6 +200,7 @@ def _compare_net_contents(expected: str, found: str | None) -> FieldResult:
 
 
 def _compare_government_warning(expected: str, found: str | None) -> FieldResult:
+    """Compare the government warning exactly while ignoring outer whitespace."""
     status = "PASS" if found is not None and expected.strip() == found.strip() else "FAIL"
     return FieldResult(
         field="government_warning",
@@ -187,38 +212,50 @@ def _compare_government_warning(expected: str, found: str | None) -> FieldResult
 
 
 def _normalize_text(value: str) -> str:
+    """Collapse whitespace and case-fold text for matching."""
     return " ".join(value.strip().split()).casefold()
 
 
 def _fuzzy_score(expected: str, found: str) -> float:
+    """Return a fuzzy similarity score using rapidfuzz when available."""
     if fuzz is not None:
         return float(fuzz.WRatio(expected, found))
+
     return SequenceMatcher(None, expected, found).ratio() * 100
 
 
 def _normalize_country(value: str) -> str:
+    """Remove punctuation and normalize country text for comparison."""
     without_punctuation = value.translate(str.maketrans("", "", string.punctuation))
     return _normalize_text(without_punctuation)
 
 
 def _countries_match(expected: str, found: str) -> bool:
+    """Return whether countries match directly or through a synonym group."""
     if expected == found:
         return True
+
     return any(expected in group and found in group for group in COUNTRY_SYNONYM_GROUPS)
 
 
 def _parse_abv(value: str | None) -> float | None:
+    """Parse the first numeric ABV value from text."""
     if value is None:
         return None
+
     match = re.search(r"\d+(?:\.\d+)?", value)
     if match is None:
         return None
+
     return float(match.group(0))
 
 
 def _parse_net_contents_ml(value: str | None) -> float | None:
+    """Parse supported net contents units and return the amount in milliliters."""
     if value is None:
         return None
+
+    # Match an amount followed by a supported volume unit.
     unit_pattern = (
         r"fluid\s+ounces?|fl\s*oz|milliliters?|liters?|ml|cl|l|oz"
     )
@@ -230,16 +267,20 @@ def _parse_net_contents_ml(value: str | None) -> float | None:
     if match is None:
         return None
 
+    # Normalize the captured unit and convert the amount to milliliters.
     unit = _normalize_unit(match.group("unit"))
     factor = UNIT_FACTORS_TO_ML.get(unit)
     if factor is None:
         return None
+
     return float(match.group("amount")) * factor
 
 
 def _normalize_unit(unit: str) -> str:
+    """Normalize volume unit text for lookup in the conversion table."""
     normalized = _normalize_text(unit)
     normalized = re.sub(r"\s+", " ", normalized)
     if normalized == "floz":
         return "fl oz"
+
     return normalized
