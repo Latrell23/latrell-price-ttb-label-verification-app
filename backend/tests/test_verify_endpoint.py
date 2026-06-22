@@ -199,13 +199,19 @@ def collect_batch_stream(
     service: SequenceVisionService,
     items: list[dict[str, str]],
     files: dict[str, UploadFile] | None = None,
+    close_files_before_iterating: bool = False,
 ) -> list[dict]:
     async def run_stream() -> list[dict]:
+        request_files = files if files is not None else batch_files(len(items))
         response = await verify_batch_stream_endpoint(
-            request=FakeBatchRequest(files if files is not None else batch_files(len(items))),
+            request=FakeBatchRequest(request_files),
             items=json.dumps(items),
             vision_service=service,
         )
+        if close_files_before_iterating:
+            for upload in request_files.values():
+                upload.file.close()
+
         events = []
         async for chunk in response.body_iterator:
             text = chunk.decode() if isinstance(chunk, bytes) else chunk
@@ -686,4 +692,29 @@ def test_verify_batch_stream_reports_real_item_progress(monkeypatch) -> None:
         "completed": 3,
         "failed": 0,
         "total": 3,
+    }
+
+
+def test_verify_batch_stream_does_not_read_uploads_after_response_starts() -> None:
+    service = SequenceVisionService([extracted_label(), extracted_label()])
+
+    events = collect_batch_stream(
+        service,
+        batch_items(2),
+        batch_files(2),
+        close_files_before_iterating=True,
+    )
+
+    item_events = [event for event in events if event["type"] == "item"]
+    complete_event = next(event for event in events if event["type"] == "complete")
+    assert [event["item"]["status"] for event in item_events] == [
+        "completed",
+        "completed",
+    ]
+    assert complete_event["summary"] == {
+        "passed": 2,
+        "needs_review": 0,
+        "completed": 2,
+        "failed": 0,
+        "total": 2,
     }

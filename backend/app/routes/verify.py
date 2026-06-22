@@ -277,13 +277,54 @@ async def _verify_batch_item(
         )
 
     image_bytes, image_error = await read_validated_image(upload)
-    if image_error is not None:
+    return await _verify_batch_item_data(
+        item=item,
+        file_name=upload.filename,
+        image_bytes=image_bytes,
+        image_error=_json_response_error(image_error) if image_error is not None else None,
+        content_type=upload.content_type,
+        vision_service=vision_service,
+        semaphore=semaphore,
+        executor=executor,
+    )
+
+
+async def _verify_batch_item_data(
+    *,
+    item: dict[str, Any],
+    file_name: str | None,
+    image_bytes: bytes | None,
+    image_error: APIError | None,
+    content_type: str | None,
+    vision_service: VisionService,
+    semaphore: asyncio.Semaphore,
+    executor: concurrent.futures.ThreadPoolExecutor,
+) -> BatchVerificationItem:
+    """Validate and verify one batch item from already-read upload bytes."""
+    application_data, field_error = validate_application_fields(
+        {field: item.get(field) for field in APPLICATION_FIELD_NAMES}
+    )
+    if field_error is not None:
         return BatchVerificationItem(
             client_id=item["client_id"],
-            file_name=upload.filename,
+            file_name=file_name,
             status="failed",
             result=None,
-            error=_json_response_error(image_error),
+            error=_json_response_error(field_error),
+        )
+
+    if image_error is not None or image_bytes is None:
+        return BatchVerificationItem(
+            client_id=item["client_id"],
+            file_name=file_name,
+            status="failed",
+            result=None,
+            error=image_error
+            or _error_payload(
+                "invalid_image",
+                "The uploaded file is not a readable image.",
+                [{"field": "image", "message": "Upload a readable image file."}],
+            ),
         )
 
     started_at = _now_counter()
@@ -292,7 +333,7 @@ async def _verify_batch_item(
             extracted_label = await _extract_label_in_thread(
                 vision_service,
                 image_bytes,
-                upload.content_type,
+                content_type,
                 executor,
             )
         result = verify_label(application_data, extracted_label).model_copy(
@@ -301,7 +342,7 @@ async def _verify_batch_item(
     except Exception as exception:
         return BatchVerificationItem(
             client_id=item["client_id"],
-            file_name=upload.filename,
+            file_name=file_name,
             status="failed",
             result=None,
             error=_vision_exception_error(exception),
@@ -309,7 +350,7 @@ async def _verify_batch_item(
 
     return BatchVerificationItem(
         client_id=item["client_id"],
-        file_name=upload.filename,
+        file_name=file_name,
         status="completed",
         result=result,
         error=None,
@@ -587,6 +628,19 @@ async def verify_batch_stream_endpoint(
             missing_uploads,
         )
 
+    prepared_uploads: dict[str, dict[str, object]] = {}
+    for item in batch_items:
+        upload = uploads[item["image_field"]]
+        image_bytes, image_error = await read_validated_image(upload)
+        prepared_uploads[item["image_field"]] = {
+            "file_name": upload.filename,
+            "content_type": upload.content_type,
+            "image_bytes": image_bytes,
+            "image_error": (
+                _json_response_error(image_error) if image_error is not None else None
+            ),
+        }
+
     resolved_vision_service = resolve_vision_service(vision_service)
 
     async def stream_results():
@@ -597,18 +651,23 @@ async def verify_batch_stream_endpoint(
         failed_items = 0
         item_results: list[BatchVerificationItem] = []
 
-        tasks = [
-            asyncio.create_task(
-                _verify_batch_item(
-                    item=item,
-                    upload=uploads[item["image_field"]],
-                    vision_service=resolved_vision_service,
-                    semaphore=semaphore,
-                    executor=executor,
+        tasks = []
+        for item in batch_items:
+            prepared_upload = prepared_uploads[item["image_field"]]
+            tasks.append(
+                asyncio.create_task(
+                    _verify_batch_item_data(
+                        item=item,
+                        file_name=prepared_upload["file_name"],
+                        image_bytes=prepared_upload["image_bytes"],
+                        image_error=prepared_upload["image_error"],
+                        content_type=prepared_upload["content_type"],
+                        vision_service=resolved_vision_service,
+                        semaphore=semaphore,
+                        executor=executor,
+                    )
                 )
             )
-            for item in batch_items
-        ]
 
         try:
             for completed_task in asyncio.as_completed(tasks):
