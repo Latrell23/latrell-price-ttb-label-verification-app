@@ -8,9 +8,24 @@ from app.routes.health import router as health_router
 from app.routes.verify import router as verify_router
 
 
+DEFAULT_ALLOWED_ORIGINS = (
+    "http://localhost:5173",
+    "https://ttb-label-frontend.vercel.app",
+)
+
+
 def _split_env_list(value: str) -> list[str]:
     """Return a cleaned list from a comma-separated environment variable."""
     return [item.strip().rstrip("/") for item in value.split(",") if item.strip()]
+
+
+def _allowed_origins(value: str | None) -> list[str]:
+    """Return default origins plus any configured comma-separated origins."""
+    origins: list[str] = []
+    for origin in [*DEFAULT_ALLOWED_ORIGINS, *_split_env_list(value or "")]:
+        if origin not in origins:
+            origins.append(origin)
+    return origins
 
 
 def create_app() -> FastAPI:
@@ -18,9 +33,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title="TTB Label Verification API")
 
     # Configure browser access for the static frontend.
-    allowed_origins = _split_env_list(
-        os.getenv("ALLOWED_ORIGINS", "http://localhost:5173")
-    )
+    allowed_origins = _allowed_origins(os.getenv("ALLOWED_ORIGINS"))
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,
