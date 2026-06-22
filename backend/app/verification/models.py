@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 Status = Literal["PASS", "FAIL"]
 OverallVerdict = Literal["APPROVED", "NEEDS_REVIEW"]
+BatchItemStatus = Literal["completed", "failed"]
 MatchType = Literal[
     "FUZZY",
     "COUNTRY_SYNONYM",
@@ -55,6 +56,49 @@ class VerificationResult(BaseModel):
 
     results: list[FieldResult]
     overall_verdict: OverallVerdict
+    latency_ms: float
+
+
+class ErrorDetail(BaseModel):
+    """Field-level API error detail."""
+
+    field: str
+    message: str
+
+
+class APIError(BaseModel):
+    """Stable API error payload without the outer error wrapper."""
+
+    code: str
+    message: str
+    details: list[ErrorDetail]
+
+
+class BatchVerificationSummary(BaseModel):
+    """Aggregate counts for a batch verification response."""
+
+    passed: int
+    needs_review: int
+    completed: int
+    failed: int
+    total: int
+
+
+class BatchVerificationItem(BaseModel):
+    """Per-label batch verification outcome."""
+
+    client_id: str
+    file_name: str | None
+    status: BatchItemStatus
+    result: VerificationResult | None
+    error: APIError | None
+
+
+class BatchVerificationResponse(BaseModel):
+    """Batch verification API response with partial-result support."""
+
+    items: list[BatchVerificationItem]
+    summary: BatchVerificationSummary
     latency_ms: float
 
 
