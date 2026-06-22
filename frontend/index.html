@@ -4,18 +4,23 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>TTB Label Verification</title>
-    <link rel="stylesheet" href="./styles.css?v=phase5-batch-4" />
+    <link rel="stylesheet" href="./styles.css?v=phase6-gov-layout-1" />
   </head>
   <body>
+    
+
+    <header class="site-header">
+      <div class="site-header-inner">
+        <p class="agency-label">Alcohol Label Review</p>
+        <h1 id="title">TTB Label Verification</h1>
+        <p class="summary">
+          Choose a label image and enter the expected application information.
+        </p>
+      </div>
+    </header>
+
     <main class="shell">
       <section class="panel" aria-labelledby="title">
-        <header class="page-header">
-          <h1 id="title">TTB Label Verification</h1>
-          <p class="summary">
-            Choose a label image and enter the expected application information.
-          </p>
-        </header>
-
         <div class="mode-tabs" role="tablist" aria-label="Verification mode">
           <button
             id="single-tab"
@@ -39,79 +44,87 @@
           </button>
         </div>
 
-        <form id="verification-form" class="mode-panel" aria-labelledby="single-tab" novalidate>
+        <form
+          id="verification-form"
+          class="mode-panel"
+          role="tabpanel"
+          aria-labelledby="single-tab"
+          novalidate
+        >
           <div id="form-error" class="form-error" role="alert" hidden></div>
 
-          <section class="form-section" aria-labelledby="image-heading">
-            <h2 id="image-heading">Label Image</h2>
-            <label class="file-control" for="image">
-              <span class="file-label">Choose Label Image</span>
-              <input
-                id="image"
-                name="image"
-                type="file"
-                accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
-              />
-            </label>
-            <p id="image-error" class="field-error" hidden></p>
-            <div id="image-preview-wrap" class="image-preview-wrap" hidden>
-              <p id="selected-file-name" class="selected-file-name"></p>
-              <img id="image-preview" alt="Selected label preview" />
-            </div>
-          </section>
-
-          <section class="form-section" aria-labelledby="fields-heading">
-            <h2 id="fields-heading">Expected Application Information</h2>
-
-            <div class="field-grid">
-              <div class="field">
-                <label for="brand_name">Brand Name</label>
-                <input id="brand_name" name="brand_name" type="text" autocomplete="off" />
-                <p id="brand_name-error" class="field-error" hidden></p>
-              </div>
-
-              <div class="field">
-                <label for="class_type">Class / Type</label>
-                <input id="class_type" name="class_type" type="text" autocomplete="off" />
-                <p id="class_type-error" class="field-error" hidden></p>
-              </div>
-
-              <div class="field">
-                <label for="abv">Alcohol By Volume</label>
-                <input id="abv" name="abv" type="text" autocomplete="off" />
-                <p id="abv-error" class="field-error" hidden></p>
-              </div>
-
-              <div class="field">
-                <label for="net_contents">Net Contents</label>
-                <input id="net_contents" name="net_contents" type="text" autocomplete="off" />
-                <p id="net_contents-error" class="field-error" hidden></p>
-              </div>
-
-              <div class="field">
-                <label for="producer">Producer</label>
-                <input id="producer" name="producer" type="text" autocomplete="off" />
-                <p id="producer-error" class="field-error" hidden></p>
-              </div>
-
-              <div class="field">
-                <label for="country_of_origin">Country of Origin</label>
+          <div class="verification-layout">
+            <section class="form-section image-section" aria-labelledby="image-heading">
+              <h2 id="image-heading">Label Image</h2>
+              <label class="file-control" for="image">
+                <span class="file-label">Choose Label Image</span>
                 <input
-                  id="country_of_origin"
-                  name="country_of_origin"
-                  type="text"
-                  autocomplete="off"
+                  id="image"
+                  name="image"
+                  type="file"
+                  accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
                 />
-                <p id="country_of_origin-error" class="field-error" hidden></p>
+              </label>
+              <p id="image-error" class="field-error" hidden></p>
+              <div id="image-preview-wrap" class="image-preview-wrap" hidden>
+                <p id="selected-file-name" class="selected-file-name"></p>
+                <img id="image-preview" alt="Selected label preview" />
               </div>
+            </section>
 
-              <div class="field field-full">
-                <label for="government_warning">Government Warning</label>
-                <textarea id="government_warning" name="government_warning" rows="5"></textarea>
-                <p id="government_warning-error" class="field-error" hidden></p>
+            <section class="form-section fields-section" aria-labelledby="fields-heading">
+              <h2 id="fields-heading">Expected Application Information</h2>
+
+              <div class="field-grid">
+                <div class="field">
+                  <label for="brand_name">Brand Name</label>
+                  <input id="brand_name" name="brand_name" type="text" autocomplete="off" />
+                  <p id="brand_name-error" class="field-error" hidden></p>
+                </div>
+
+                <div class="field">
+                  <label for="class_type">Class / Type</label>
+                  <input id="class_type" name="class_type" type="text" autocomplete="off" />
+                  <p id="class_type-error" class="field-error" hidden></p>
+                </div>
+
+                <div class="field">
+                  <label for="abv">Alcohol By Volume</label>
+                  <input id="abv" name="abv" type="text" autocomplete="off" />
+                  <p id="abv-error" class="field-error" hidden></p>
+                </div>
+
+                <div class="field">
+                  <label for="net_contents">Net Contents</label>
+                  <input id="net_contents" name="net_contents" type="text" autocomplete="off" />
+                  <p id="net_contents-error" class="field-error" hidden></p>
+                </div>
+
+                <div class="field">
+                  <label for="producer">Producer</label>
+                  <input id="producer" name="producer" type="text" autocomplete="off" />
+                  <p id="producer-error" class="field-error" hidden></p>
+                </div>
+
+                <div class="field">
+                  <label for="country_of_origin">Country of Origin</label>
+                  <input
+                    id="country_of_origin"
+                    name="country_of_origin"
+                    type="text"
+                    autocomplete="off"
+                  />
+                  <p id="country_of_origin-error" class="field-error" hidden></p>
+                </div>
+
+                <div class="field field-full">
+                  <label for="government_warning">Government Warning</label>
+                  <textarea id="government_warning" name="government_warning" rows="5"></textarea>
+                  <p id="government_warning-error" class="field-error" hidden></p>
+                </div>
               </div>
-            </div>
-          </section>
+            </section>
+          </div>
 
           <div id="loading-message" class="loading-message" role="status" hidden>
             Reading the image and checking the fields. This may take a moment.
@@ -125,6 +138,7 @@
         <form
           id="batch-form"
           class="mode-panel"
+          role="tabpanel"
           aria-labelledby="batch-tab"
           hidden
           novalidate
@@ -156,6 +170,6 @@
     </main>
 
     <script src="./config.js"></script>
-    <script src="./app.js?v=phase5-batch-4"></script>
+    <script type="module" src="./js/app.js?v=phase6-modules-1"></script>
   </body>
 </html>
