@@ -47,8 +47,7 @@ after idle may be slower than warm requests.
 - Google GenAI / Gemini API
 - Native browser JavaScript modules
 - Render for backend deployment
-- Vercel or another static host for frontend deployment
-
+- Vercel
 ## Local Setup
 
 Create a backend environment:
