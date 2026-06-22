@@ -292,6 +292,59 @@ def test_verify_mismatched_extracted_field_returns_needs_review() -> None:
     assert brand["status"] == "FAIL"
 
 
+def test_verify_case_only_application_difference_is_approved() -> None:
+    service = SpyVisionService(extracted_label(brand_name="ACME ESTATE"))
+
+    response = call_verify(service)
+
+    status_code, body = response_status_and_body(response)
+    assert status_code == 200
+    assert body["overall_verdict"] == "APPROVED"
+    assert result_for_field(body, "brand_name")["status"] == "PASS"
+
+
+def test_verify_imperfect_readable_image_returns_needs_review_with_null_fields() -> None:
+    service = SpyVisionService(
+        extracted_label(
+            class_type=None,
+            producer=None,
+            government_warning=None,
+            extraction_confidence=0.36,
+        )
+    )
+
+    response = call_verify(service)
+
+    status_code, body = response_status_and_body(response)
+    assert status_code == 200
+    assert body["overall_verdict"] == "NEEDS_REVIEW"
+    assert result_for_field(body, "class_type")["found"] is None
+    assert result_for_field(body, "government_warning")["status"] == "FAIL"
+
+
+def test_verify_non_label_image_returns_needs_review_not_hallucinated_values() -> None:
+    service = SpyVisionService(
+        extracted_label(
+            brand_name=None,
+            class_type=None,
+            abv=None,
+            net_contents=None,
+            producer=None,
+            country_of_origin=None,
+            government_warning=None,
+            raw_text=None,
+            extraction_confidence=0.0,
+        )
+    )
+
+    response = call_verify(service)
+
+    status_code, body = response_status_and_body(response)
+    assert status_code == 200
+    assert body["overall_verdict"] == "NEEDS_REVIEW"
+    assert all(result["found"] is None for result in body["results"])
+
+
 def test_verify_warning_failure_surfaces_extracted_warning_text() -> None:
     misread_warning = WARNING.replace("SURGEON", "S URGE0N", 1)
     service = SpyVisionService(extracted_label(government_warning=misread_warning))
@@ -329,6 +382,7 @@ def test_verify_missing_required_application_field_returns_422() -> None:
     assert body["error"]["details"] == [
         {"field": "producer", "message": "This field is required."}
     ]
+    assert service.calls == []
     assert_no_internal_details(response)
 
 

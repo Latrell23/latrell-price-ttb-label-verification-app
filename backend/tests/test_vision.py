@@ -390,3 +390,47 @@ def test_sample_script_mock_mode_returns_populated_label(
     assert output["brand_name"] == "Acme Estate"
     assert output["government_warning"].startswith("GOVERNMENT WARNING:")
     assert output["extraction_confidence"] > 0
+
+
+def test_phase6_benchmark_mock_mode_reports_latency_summary(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    scripts_dir = Path(__file__).resolve().parents[1] / "scripts"
+    sys.path.insert(0, str(scripts_dir))
+    try:
+        import benchmark_phase6
+
+        jsonl_path = tmp_path / "benchmark.jsonl"
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "benchmark_phase6.py",
+                "--mock",
+                "--runs",
+                "1",
+                "--fixture-dir",
+                str(tmp_path / "fixtures"),
+                "--jsonl",
+                str(jsonl_path),
+            ],
+        )
+
+        exit_code = benchmark_phase6.main()
+    finally:
+        sys.path.remove(str(scripts_dir))
+
+    output = json.loads(capsys.readouterr().out)
+    records = [
+        json.loads(line)
+        for line in jsonl_path.read_text(encoding="utf-8").splitlines()
+        if line
+    ]
+    assert exit_code == 0
+    assert output["run_count"] == 7
+    assert output["targets"]["warm_single_label_max_ms"] == 5000
+    assert len(records) == 7
+    assert any(record["error_code"] == "invalid_image" for record in records)
+    assert all(record["config"]["provider"] == "fake" for record in records)

@@ -2,6 +2,8 @@
   const config = window.APP_CONFIG || {};
   const apiBaseUrl = (config.API_BASE_URL || "http://localhost:8000").replace(/\/$/, "");
   const maxBatchRows = 5;
+  const maxUploadBytes = 10 * 1024 * 1024;
+  const supportedImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 
   const fields = [
     { name: "brand_name", label: "Brand Name", type: "input" },
@@ -126,6 +128,12 @@
     if (!hasImage()) {
       showFieldError("image", "Choose one label image.");
       isValid = false;
+    } else {
+      const imageError = validateImageFile(imageInput.files[0]);
+      if (imageError) {
+        showFieldError("image", imageError);
+        isValid = false;
+      }
     }
 
     fields.forEach((field) => {
@@ -165,11 +173,15 @@
     }
 
     const file = imageInput.files[0];
+    clearFieldError("image");
+    const imageError = validateImageFile(file);
+    if (imageError) {
+      showFieldError("image", imageError);
+    }
     previewUrl = URL.createObjectURL(file);
     selectedFileName.textContent = file.name;
     imagePreview.src = previewUrl;
     previewWrap.hidden = false;
-    clearFieldError("image");
     refreshSubmitState();
   }
 
@@ -395,6 +407,22 @@
     return Array.from(batchForm.querySelectorAll("input, textarea, button"));
   }
 
+  function validateImageFile(file) {
+    if (!file) {
+      return "Choose one label image.";
+    }
+    if (!supportedImageTypes.has(file.type)) {
+      return "Please choose a JPG, PNG, or WebP image.";
+    }
+    if (file.size === 0) {
+      return "The selected file is empty.";
+    }
+    if (file.size > maxUploadBytes) {
+      return "Please choose an image that is 10 MB or smaller.";
+    }
+    return "";
+  }
+
   function showBatchFormError(message) {
     batchFormError.textContent = message;
     batchFormError.hidden = false;
@@ -600,8 +628,8 @@
 
     const imageField = rowField(row, "image");
     imageField.addEventListener("change", () => {
-      updateBatchImagePreview(row);
       clearRowError(row, "image");
+      updateBatchImagePreview(row);
     });
 
     fields.forEach((field) => {
@@ -639,6 +667,10 @@
     }
 
     const file = input.files[0];
+    const imageError = validateImageFile(file);
+    if (imageError) {
+      showRowError(row, "image", imageError);
+    }
     row.previewUrl = URL.createObjectURL(file);
     fileName.textContent = file.name;
     image.src = row.previewUrl;
@@ -673,6 +705,12 @@
       if (!image.files || image.files.length === 0) {
         showRowError(row, "image", "Choose one label image.");
         isValid = false;
+      } else {
+        const imageError = validateImageFile(image.files[0]);
+        if (imageError) {
+          showRowError(row, "image", imageError);
+          isValid = false;
+        }
       }
 
       fields.forEach((field) => {
