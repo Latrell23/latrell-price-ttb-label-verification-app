@@ -16,7 +16,30 @@
           </p>
         </header>
 
-        <form id="verification-form" novalidate>
+        <div class="mode-tabs" role="tablist" aria-label="Verification mode">
+          <button
+            id="single-tab"
+            class="mode-tab active"
+            type="button"
+            role="tab"
+            aria-selected="true"
+            aria-controls="verification-form"
+          >
+            Single Label
+          </button>
+          <button
+            id="batch-tab"
+            class="mode-tab"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="batch-form"
+          >
+            Batch
+          </button>
+        </div>
+
+        <form id="verification-form" class="mode-panel" aria-labelledby="single-tab" novalidate>
           <div id="form-error" class="form-error" role="alert" hidden></div>
 
           <section class="form-section" aria-labelledby="image-heading">
@@ -96,6 +119,24 @@
 
           <button id="verify-button" class="primary-button" type="submit">
             Verify Label
+          </button>
+        </form>
+
+        <form
+          id="batch-form"
+          class="mode-panel"
+          aria-labelledby="batch-tab"
+          hidden
+          novalidate
+        >
+          <div id="batch-form-error" class="form-error" role="alert" hidden></div>
+          <div id="batch-rows" class="batch-rows"></div>
+          <button id="add-batch-row" class="secondary-button compact" type="button">
+            Add Another Label
+          </button>
+          <div id="batch-loading-message" class="loading-message" role="status" hidden></div>
+          <button id="batch-submit-button" class="primary-button" type="submit">
+            Verify Batch
           </button>
         </form>
 

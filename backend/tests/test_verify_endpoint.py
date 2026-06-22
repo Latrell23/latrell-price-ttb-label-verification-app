@@ -1,13 +1,17 @@
 import asyncio
 import json
 import logging
+import time
 from collections.abc import Callable
 from io import BytesIO
+from threading import Lock
+from types import SimpleNamespace
 
 from fastapi.responses import JSONResponse
 from starlette.datastructures import Headers, UploadFile
 
 from app.main import create_app
+from app.routes.verify import verify_batch_endpoint
 from app.verification.models import ExtractedLabel, VerificationResult
 from app.vision import (
     VisionAPIError,
@@ -58,6 +62,30 @@ class SpyVisionService:
         return self.label
 
 
+class SequenceVisionService:
+    def __init__(
+        self,
+        labels: list[ExtractedLabel] | None = None,
+        delay_seconds: float = 0.0,
+    ) -> None:
+        self.labels = labels or [extracted_label()]
+        self.delay_seconds = delay_seconds
+        self.calls: list[tuple[bytes, str | None]] = []
+        self._lock = Lock()
+
+    def extract_label(
+        self, image_bytes: bytes, content_type: str | None = None
+    ) -> ExtractedLabel:
+        if self.delay_seconds:
+            time.sleep(self.delay_seconds)
+
+        with self._lock:
+            self.calls.append((image_bytes, content_type))
+            index = len(self.calls) - 1
+
+        return self.labels[min(index, len(self.labels) - 1)]
+
+
 def extracted_label(**overrides: str | None) -> ExtractedLabel:
     data = {
         "brand_name": "Acme Estate",
@@ -82,10 +110,11 @@ def verify_endpoint() -> Callable:
 def upload_file(
     content: bytes = IMAGE_BYTES,
     content_type: str = "image/jpeg",
+    filename: str = "label.jpg",
 ) -> UploadFile:
     return UploadFile(
         BytesIO(content),
-        filename="label.jpg",
+        filename=filename,
         headers=Headers({"content-type": content_type}),
     )
 
@@ -112,6 +141,58 @@ def call_verify(
             vision_service=service,
         )
     )
+
+
+def batch_items(count: int, **overrides: str) -> list[dict[str, str]]:
+    return [
+        {
+            "client_id": f"label-{index}",
+            "image_field": f"image_{index}",
+            **APPLICATION_DATA,
+            **overrides,
+        }
+        for index in range(count)
+    ]
+
+
+class FakeBatchRequest:
+    def __init__(self, form_data: dict[str, UploadFile]) -> None:
+        self.form_data = form_data
+
+    async def form(self) -> dict[str, UploadFile]:
+        return self.form_data
+
+
+def batch_files(count: int, content_type: str = "image/jpeg") -> dict[str, UploadFile]:
+    return {
+        f"image_{index}": upload_file(
+            content=f"image bytes {index}".encode(),
+            content_type=content_type,
+            filename=f"label-{index}.jpg",
+        )
+        for index in range(count)
+    }
+
+
+def post_batch(
+    service: SequenceVisionService,
+    items: list[dict[str, str]] | str | None,
+    files: dict[str, UploadFile] | None = None,
+):
+    item_payload = None if items is None else items if isinstance(items, str) else json.dumps(items)
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    result = loop.run_until_complete(
+        verify_batch_endpoint(
+            request=FakeBatchRequest(
+                files if files is not None else batch_files(len(items) if isinstance(items, list) else 1)
+            ),
+            items=item_payload,
+            vision_service=service,
+        )
+    )
+    status_code, body = response_status_and_body(result)
+    return SimpleNamespace(status_code=status_code, json=lambda: body)
 
 
 def response_status_and_body(response) -> tuple[int, dict]:
@@ -359,3 +440,198 @@ def test_verify_logs_latency_and_five_second_budget(monkeypatch, caplog) -> None
     assert record.latency_budget_ms == 5000.0
     assert record.status_code == 200
     assert record.overall_verdict == "APPROVED"
+
+
+def test_verify_batch_success_returns_summary_and_item_results() -> None:
+    service = SequenceVisionService([extracted_label(), extracted_label()])
+
+    response = post_batch(service, batch_items(2), batch_files(2))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert set(body) == {"items", "summary", "latency_ms"}
+    assert body["summary"] == {
+        "passed": 2,
+        "needs_review": 0,
+        "completed": 2,
+        "failed": 0,
+        "total": 2,
+    }
+    assert [item["status"] for item in body["items"]] == ["completed", "completed"]
+    assert body["items"][0]["client_id"] == "label-0"
+    assert body["items"][0]["file_name"] == "label-0.jpg"
+    assert body["items"][0]["result"]["overall_verdict"] == "APPROVED"
+    assert len(body["items"][0]["result"]["results"]) == 7
+    assert body["items"][0]["error"] is None
+    assert len(service.calls) == 2
+
+
+def test_verify_batch_mixed_approved_and_needs_review_counts_correctly() -> None:
+    service = SequenceVisionService(
+        [extracted_label(), extracted_label(brand_name="Wrong Brand")]
+    )
+
+    response = post_batch(service, batch_items(2), batch_files(2))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["summary"] == {
+        "passed": 1,
+        "needs_review": 1,
+        "completed": 2,
+        "failed": 0,
+        "total": 2,
+    }
+    assert body["items"][1]["result"]["overall_verdict"] == "NEEDS_REVIEW"
+
+
+def test_verify_batch_one_invalid_item_does_not_block_other_items() -> None:
+    service = SequenceVisionService([extracted_label(), extracted_label()])
+    items = batch_items(2)
+    items[0]["producer"] = " "
+
+    response = post_batch(service, items, batch_files(2))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["summary"] == {
+        "passed": 1,
+        "needs_review": 0,
+        "completed": 1,
+        "failed": 1,
+        "total": 2,
+    }
+    assert body["items"][0]["status"] == "failed"
+    assert body["items"][0]["error"]["code"] == "blank_required_fields"
+    assert body["items"][1]["status"] == "completed"
+    assert body["items"][1]["result"]["overall_verdict"] == "APPROVED"
+    assert len(service.calls) == 1
+
+
+def test_verify_batch_too_many_items_returns_whole_request_422() -> None:
+    service = SequenceVisionService()
+
+    response = post_batch(service, batch_items(6), batch_files(6))
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["error"]["code"] == "too_many_items"
+    assert service.calls == []
+
+
+def test_verify_batch_missing_items_returns_whole_request_422() -> None:
+    service = SequenceVisionService()
+
+    response = post_batch(service, None, batch_files(1))
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "missing_items"
+
+
+def test_verify_batch_malformed_json_returns_whole_request_422() -> None:
+    service = SequenceVisionService()
+
+    response = post_batch(service, "{not json", batch_files(1))
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "malformed_items"
+
+
+def test_verify_batch_missing_upload_field_returns_whole_request_422() -> None:
+    service = SequenceVisionService()
+
+    response = post_batch(service, batch_items(1), files={})
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "missing_upload_fields"
+    assert service.calls == []
+
+
+def test_verify_batch_duplicate_client_id_returns_whole_request_422() -> None:
+    service = SequenceVisionService()
+    items = batch_items(2)
+    items[1]["client_id"] = items[0]["client_id"]
+
+    response = post_batch(service, items, batch_files(2))
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "duplicate_client_id"
+
+
+def test_verify_batch_duplicate_image_field_returns_whole_request_422() -> None:
+    service = SequenceVisionService()
+    items = batch_items(2)
+    items[1]["image_field"] = items[0]["image_field"]
+
+    response = post_batch(service, items, batch_files(2))
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "duplicate_image_field"
+
+
+def test_verify_batch_unsupported_media_type_is_per_item_error() -> None:
+    service = SequenceVisionService([extracted_label(), extracted_label()])
+    files = batch_files(2)
+    files["image_0"] = upload_file(
+        content=b"%PDF",
+        content_type="application/pdf",
+        filename="label-0.pdf",
+    )
+
+    response = post_batch(service, batch_items(2), files)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["summary"]["completed"] == 1
+    assert body["summary"]["failed"] == 1
+    assert body["items"][0]["error"]["code"] == "unsupported_media_type"
+    assert body["items"][1]["result"]["overall_verdict"] == "APPROVED"
+    assert len(service.calls) == 1
+
+
+def test_verify_batch_empty_file_is_per_item_error() -> None:
+    service = SequenceVisionService([extracted_label(), extracted_label()])
+    files = batch_files(2)
+    files["image_0"] = upload_file(content=b"", filename="label-0.jpg")
+
+    response = post_batch(service, batch_items(2), files)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["items"][0]["error"]["code"] == "empty_file"
+    assert body["summary"]["completed"] == 1
+    assert body["summary"]["failed"] == 1
+
+
+def test_verify_batch_oversized_file_is_per_item_error() -> None:
+    service = SequenceVisionService([extracted_label(), extracted_label()])
+    files = batch_files(2)
+    files["image_0"] = upload_file(
+        content=b"x" * (10 * 1024 * 1024 + 1),
+        filename="label-0.jpg",
+    )
+
+    response = post_batch(service, batch_items(2), files)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["items"][0]["error"]["code"] == "file_too_large"
+    assert body["summary"]["completed"] == 1
+    assert body["summary"]["failed"] == 1
+
+
+def test_verify_batch_processes_three_labels_concurrently(monkeypatch) -> None:
+    monkeypatch.setenv("MAX_BATCH_CONCURRENCY", "3")
+    service = SequenceVisionService(
+        [extracted_label(), extracted_label(), extracted_label()],
+        delay_seconds=0.18,
+    )
+
+    started_at = time.perf_counter()
+    response = post_batch(service, batch_items(3), batch_files(3))
+    latency_seconds = time.perf_counter() - started_at
+
+    assert response.status_code == 200
+    assert response.json()["summary"]["completed"] == 3
+    assert len(service.calls) == 3
+    assert latency_seconds < 0.45
