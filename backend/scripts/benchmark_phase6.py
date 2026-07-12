@@ -13,8 +13,8 @@ sys.path.insert(0, str(BACKEND_DIR))
 
 from app.verification import ApplicationData, verify_label
 from app.vision import (
+    DEFAULT_GEMINI_MODEL,
     DEFAULT_TIMEOUT_SECONDS,
-    DEFAULT_VISION_MODEL,
     FakeVisionService,
     GeminiVisionService,
     ImagePreprocessor,
@@ -59,7 +59,7 @@ def main() -> int:
     parser.add_argument("--fixture-dir", type=Path, default=Path("/tmp/ttb-phase6-fixtures"))
     parser.add_argument("--runs", type=int, default=3)
     parser.add_argument("--mock", action="store_true", help="Use FakeVisionService.")
-    parser.add_argument("--model", default=DEFAULT_VISION_MODEL)
+    parser.add_argument("--model", default=DEFAULT_GEMINI_MODEL)
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_SECONDS)
     parser.add_argument("--max-edge", type=int, default=2048)
     parser.add_argument("--jpeg-quality", type=int, default=85)

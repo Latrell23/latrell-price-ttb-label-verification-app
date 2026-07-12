@@ -33,7 +33,7 @@ from app.vision import (
 
 LOGGER = logging.getLogger("app.main")
 LATENCY_BUDGET_MS = 5000.0
-MAX_BATCH_ITEMS = 5
+DEFAULT_MAX_BATCH_ITEMS = 5
 DEFAULT_MAX_BATCH_CONCURRENCY = 3
 VisionServiceDependency = VisionService | Callable[[], VisionService]
 APPLICATION_FIELD_NAMES = (
@@ -89,6 +89,16 @@ def _max_batch_concurrency() -> int:
         )
     except ValueError:
         return DEFAULT_MAX_BATCH_CONCURRENCY
+
+    return max(1, configured)
+
+
+def _max_batch_items() -> int:
+    """Return the configured maximum item count for one batch request."""
+    try:
+        configured = int(os.getenv("MAX_BATCH_ITEMS", str(DEFAULT_MAX_BATCH_ITEMS)))
+    except ValueError:
+        return DEFAULT_MAX_BATCH_ITEMS
 
     return max(1, configured)
 
@@ -182,12 +192,13 @@ def _parse_batch_items(
             [{"field": "items", "message": "Add at least one label."}],
         )
 
-    if len(parsed) > MAX_BATCH_ITEMS:
+    max_batch_items = _max_batch_items()
+    if len(parsed) > max_batch_items:
         return None, error_response(
             422,
             "too_many_items",
-            f"Verify no more than {MAX_BATCH_ITEMS} labels at once.",
-            [{"field": "items", "message": f"Maximum is {MAX_BATCH_ITEMS} labels."}],
+            f"Verify no more than {max_batch_items} labels at once.",
+            [{"field": "items", "message": f"Maximum is {max_batch_items} labels."}],
         )
 
     client_ids: set[str] = set()

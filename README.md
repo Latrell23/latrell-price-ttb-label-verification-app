@@ -67,6 +67,7 @@ export APP_ENV=local
 export ALLOWED_ORIGINS=http://localhost:5173
 export GEMINI_API_KEY=<your Gemini API key>
 export GEMINI_MODEL=gemini-3.5-flash
+export MAX_BATCH_ITEMS=5
 ```
 
 Start the backend:
@@ -189,6 +190,7 @@ Backend on Render:
    - `ALLOWED_ORIGINS=https://ttb-label-frontend.vercel.app`
    - `GEMINI_API_KEY=<provider secret>`
    - `GEMINI_MODEL=gemini-3.5-flash`
+   - `MAX_BATCH_ITEMS=5`
 
 Frontend on Vercel or another static host:
 
@@ -253,8 +255,8 @@ git check-ignore -v .env .env.local .env.production
 git ls-files | rg '(^|/)\.env($|\.)'
 git ls-files | rg '(^|/)\.env[^/]*$'
 git log --all --name-only --pretty=format: | rg '(^|/)\.env($|\.)|(^|/)\.env[^/]*$'
-rg -n --hidden --glob '!.git/**' --glob '!backend/.venv/**' --glob '!node_modules/**' '(api[_-]?key|secret|token|password|GEMINI_API_KEY|OPENAI_API_KEY|VISION_MODEL_API_KEY|AIza|sk-[A-Za-z0-9_-]+)' .
-git grep -n -I -E '(api[_-]?key|secret|token|password|GEMINI_API_KEY|OPENAI_API_KEY|VISION_MODEL_API_KEY|AIza|sk-[A-Za-z0-9_-]+)' $(git rev-list --all) -- . ':!backend/.venv/**' ':!node_modules/**'
+rg -n --hidden --glob '!.git/**' --glob '!backend/.venv/**' --glob '!node_modules/**' '(api[_-]?key|secret|token|password|GEMINI_API_KEY|AIza)' .
+git grep -n -I -E '(api[_-]?key|secret|token|password|GEMINI_API_KEY|AIza)' $(git rev-list --all) -- . ':!backend/.venv/**' ':!node_modules/**'
 git diff --check
 backend/.venv/bin/pytest
 ```

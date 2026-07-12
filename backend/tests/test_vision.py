@@ -9,11 +9,11 @@ import pytest
 
 from app.verification.models import ExtractedLabel
 from app.vision import (
-    DEFAULT_VISION_MODEL,
+    DEFAULT_GEMINI_MODEL,
+    DEFAULT_TIMEOUT_SECONDS,
     FakeVisionService,
     GeminiVisionService,
     ImagePreprocessor,
-    OpenAIVisionService,
     VisionAPIError,
     VisionConfigurationError,
     VisionImageValidationError,
@@ -28,24 +28,6 @@ WARNING = (
     "ABILITY TO DRIVE A CAR OR OPERATE MACHINERY, AND MAY CAUSE HEALTH "
     "PROBLEMS."
 )
-
-
-class FakeResponses:
-    def __init__(self, response: Any | None = None, exception: Exception | None = None):
-        self.response = response
-        self.exception = exception
-        self.calls: list[dict[str, Any]] = []
-
-    def parse(self, **kwargs: Any) -> Any:
-        self.calls.append(kwargs)
-        if self.exception is not None:
-            raise self.exception
-        return self.response
-
-
-class FakeClient:
-    def __init__(self, response: Any | None = None, exception: Exception | None = None):
-        self.responses = FakeResponses(response, exception)
 
 
 class FakeGeminiModels:
@@ -93,10 +75,6 @@ def image_bytes(size: tuple[int, int] = (320, 240), mode: str = "RGB") -> bytes:
     return output.getvalue()
 
 
-def response_with(parsed: Any) -> SimpleNamespace:
-    return SimpleNamespace(output_parsed=parsed, output=[])
-
-
 def gemini_response(parsed: Any | None = None, text: str | None = None) -> SimpleNamespace:
     return SimpleNamespace(parsed=parsed, text=text)
 
@@ -119,7 +97,8 @@ def test_gemini_request_uses_default_model_json_schema_and_image_part() -> None:
 
     call = client.models.calls[0]
     assert call["model"] == "gemini-3.5-flash"
-    assert DEFAULT_VISION_MODEL == "gemini-3.5-flash"
+    assert DEFAULT_GEMINI_MODEL == "gemini-3.5-flash"
+    assert DEFAULT_TIMEOUT_SECONDS == 4.5
     assert call["config"]["response_mime_type"] == "application/json"
     assert call["config"]["response_schema"] is ExtractedLabel
     assert call["config"]["temperature"] == 0
@@ -190,37 +169,9 @@ def test_gemini_missing_key_raises_configuration_error(
         GeminiVisionService()
 
 
-def test_openai_service_returns_parsed_extracted_label() -> None:
-    expected = label()
-    client = FakeClient(response_with(expected))
-    service = OpenAIVisionService(client=client)
-
-    actual = service.extract_label(image_bytes(), "image/png")
-
-    assert actual == expected
-
-
-def test_request_uses_structured_output_and_high_detail_image() -> None:
-    client = FakeClient(response_with(label()))
-    service = OpenAIVisionService(client=client, model="gpt-test", timeout_seconds=4.5)
-
-    service.extract_label(image_bytes(), "image/png")
-
-    call = client.responses.calls[0]
-    assert call["model"] == "gpt-test"
-    assert call["text_format"] is ExtractedLabel
-    assert call["reasoning"] == {"effort": "low"}
-    assert call["text"] == {"verbosity": "low"}
-    assert call["timeout"] == 4.5
-    image_part = call["input"][1]["content"][1]
-    assert image_part["type"] == "input_image"
-    assert image_part["detail"] == "high"
-    assert image_part["image_url"].startswith("data:image/jpeg;base64,")
-
-
 def test_unknown_fields_remain_none() -> None:
     expected = label(producer=None, country_of_origin=None)
-    service = OpenAIVisionService(client=FakeClient(response_with(expected)))
+    service = GeminiVisionService(client=FakeGeminiClient(gemini_response(parsed=expected)))
 
     actual = service.extract_label(image_bytes())
 
@@ -229,7 +180,7 @@ def test_unknown_fields_remain_none() -> None:
 
 
 def test_government_warning_is_preserved_verbatim() -> None:
-    service = OpenAIVisionService(client=FakeClient(response_with(label())))
+    service = GeminiVisionService(client=FakeGeminiClient(gemini_response(parsed=label())))
 
     actual = service.extract_label(image_bytes())
 
@@ -237,8 +188,8 @@ def test_government_warning_is_preserved_verbatim() -> None:
 
 
 def test_incomplete_government_warning_can_return_none() -> None:
-    service = OpenAIVisionService(
-        client=FakeClient(response_with(label(government_warning=None)))
+    service = GeminiVisionService(
+        client=FakeGeminiClient(gemini_response(parsed=label(government_warning=None)))
     )
 
     actual = service.extract_label(image_bytes())
@@ -253,7 +204,7 @@ def test_partial_blurry_response_returns_partial_label() -> None:
         government_warning=None,
         extraction_confidence=0.36,
     )
-    service = OpenAIVisionService(client=FakeClient(response_with(partial)))
+    service = GeminiVisionService(client=FakeGeminiClient(gemini_response(parsed=partial)))
 
     actual = service.extract_label(image_bytes())
 
@@ -274,7 +225,7 @@ def test_non_label_image_returns_null_fields_and_low_confidence() -> None:
         raw_text=None,
         extraction_confidence=0.0,
     )
-    service = OpenAIVisionService(client=FakeClient(response_with(non_label)))
+    service = GeminiVisionService(client=FakeGeminiClient(gemini_response(parsed=non_label)))
 
     actual = service.extract_label(image_bytes())
 
@@ -300,58 +251,24 @@ def test_preprocessor_does_not_upscale_small_images() -> None:
 
 
 def test_invalid_image_bytes_raise_validation_error_without_api_call() -> None:
-    client = FakeClient(response_with(label()))
-    service = OpenAIVisionService(client=client)
+    client = FakeGeminiClient(gemini_response(parsed=label()))
+    service = GeminiVisionService(client=client)
 
     with pytest.raises(VisionImageValidationError):
         service.extract_label(b"not an image")
 
-    assert client.responses.calls == []
+    assert client.models.calls == []
 
 
 def test_api_timeout_translates_to_service_exception() -> None:
-    service = OpenAIVisionService(client=FakeClient(exception=TimeoutError("slow")))
-
-    with pytest.raises(VisionAPIError):
-        service.extract_label(image_bytes())
-
-
-def test_sdk_exception_translates_to_service_exception() -> None:
-    service = OpenAIVisionService(client=FakeClient(exception=RuntimeError("boom")))
+    service = GeminiVisionService(client=FakeGeminiClient(exception=TimeoutError("slow")))
 
     with pytest.raises(VisionAPIError):
         service.extract_label(image_bytes())
 
 
 def test_missing_parsed_output_raises_parse_error() -> None:
-    service = OpenAIVisionService(client=FakeClient(SimpleNamespace(output=[])))
-
-    with pytest.raises(VisionParseError):
-        service.extract_label(image_bytes())
-
-
-def test_refusal_content_raises_parse_error() -> None:
-    response = SimpleNamespace(
-        output=[
-            SimpleNamespace(
-                content=[
-                    SimpleNamespace(
-                        type="refusal",
-                        refusal="I cannot extract this image.",
-                    )
-                ]
-            )
-        ]
-    )
-    service = OpenAIVisionService(client=FakeClient(response))
-
-    with pytest.raises(VisionParseError):
-        service.extract_label(image_bytes())
-
-
-def test_malformed_structured_output_raises_parse_error() -> None:
-    malformed = {"brand_name": "Acme Estate"}
-    service = OpenAIVisionService(client=FakeClient(response_with(malformed)))
+    service = GeminiVisionService(client=FakeGeminiClient(gemini_response()))
 
     with pytest.raises(VisionParseError):
         service.extract_label(image_bytes())

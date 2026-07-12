@@ -1,4 +1,4 @@
-from app.vision.constants import DEFAULT_TIMEOUT_SECONDS, DEFAULT_VISION_MODEL
+from app.vision.constants import DEFAULT_GEMINI_MODEL, DEFAULT_TIMEOUT_SECONDS
 from app.vision.errors import (
     VisionAPIError,
     VisionConfigurationError,
@@ -10,21 +10,18 @@ from app.vision.fake import FakeVisionService
 from app.vision.preprocessing import ImagePreprocessor, ProcessedImage
 from app.vision.protocols import (
     GeminiClientProtocol,
-    OpenAIClientProtocol,
     VisionService,
 )
-from app.vision.providers import GeminiVisionService, OpenAIVisionService
+from app.vision.providers import GeminiVisionService
 
 
 __all__ = [
     "DEFAULT_TIMEOUT_SECONDS",
-    "DEFAULT_VISION_MODEL",
+    "DEFAULT_GEMINI_MODEL",
     "FakeVisionService",
     "GeminiClientProtocol",
     "GeminiVisionService",
     "ImagePreprocessor",
-    "OpenAIClientProtocol",
-    "OpenAIVisionService",
     "ProcessedImage",
     "VisionAPIError",
     "VisionConfigurationError",

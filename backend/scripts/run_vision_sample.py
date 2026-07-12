@@ -8,8 +8,8 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_DIR))
 
 from app.vision import (
+    DEFAULT_GEMINI_MODEL,
     DEFAULT_TIMEOUT_SECONDS,
-    DEFAULT_VISION_MODEL,
     FakeVisionService,
     GeminiVisionService,
 )
@@ -38,7 +38,7 @@ def main() -> int:
         action="store_true",
         help="Use deterministic mock extraction data instead of calling Gemini",
     )
-    parser.add_argument("--model", default=DEFAULT_VISION_MODEL)
+    parser.add_argument("--model", default=DEFAULT_GEMINI_MODEL)
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_SECONDS)
     args = parser.parse_args()
 

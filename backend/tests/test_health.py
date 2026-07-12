@@ -16,8 +16,9 @@ def test_health_returns_ok() -> None:
     assert "checked_at" in body
 
 
-def test_cors_allows_deployed_frontend_when_env_has_existing_origin(monkeypatch) -> None:
-    monkeypatch.setenv("ALLOWED_ORIGINS", "http://localhost:5173")
+def test_cors_uses_env_origin_in_production(monkeypatch) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("ALLOWED_ORIGINS", "https://ttb-label-frontend.vercel.app")
     app = create_app()
 
     cors_middleware = next(
@@ -25,5 +26,19 @@ def test_cors_allows_deployed_frontend_when_env_has_existing_origin(monkeypatch)
     )
 
     assert "https://ttb-label-frontend.vercel.app" in cors_middleware.kwargs[
+        "allow_origins"
+    ]
+
+
+def test_cors_does_not_hardcode_deployed_frontend_in_production(monkeypatch) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.delenv("ALLOWED_ORIGINS", raising=False)
+    app = create_app()
+
+    cors_middleware = next(
+        middleware for middleware in app.user_middleware if middleware.cls is CORSMiddleware
+    )
+
+    assert "https://ttb-label-frontend.vercel.app" not in cors_middleware.kwargs[
         "allow_origins"
     ]

@@ -601,6 +601,21 @@ def test_verify_batch_too_many_items_returns_whole_request_422() -> None:
     assert service.calls == []
 
 
+def test_verify_batch_item_cap_uses_env_before_reading_uploads(monkeypatch) -> None:
+    monkeypatch.setenv("MAX_BATCH_ITEMS", "2")
+    service = SequenceVisionService()
+
+    response = post_batch(service, batch_items(3), batch_files(3))
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["error"]["code"] == "too_many_items"
+    assert body["error"]["details"] == [
+        {"field": "items", "message": "Maximum is 2 labels."}
+    ]
+    assert service.calls == []
+
+
 def test_verify_batch_missing_items_returns_whole_request_422() -> None:
     service = SequenceVisionService()
 
