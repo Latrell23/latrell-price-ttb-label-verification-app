@@ -1,6 +1,7 @@
 from io import BytesIO
 import json
 import sys
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -18,6 +19,7 @@ from app.vision import (
     VisionConfigurationError,
     VisionImageValidationError,
     VisionParseError,
+    extract_label_with_timeout_sync,
 )
 
 
@@ -281,6 +283,23 @@ def test_fake_vision_service_is_mockable_without_client() -> None:
 
     assert actual.brand_name == "Fixture Brand"
     assert fake.calls == [(b"bytes", "image/png")]
+
+
+def test_sync_timeout_helper_raises_api_error_for_slow_extraction() -> None:
+    class SlowVisionService:
+        def extract_label(
+            self, image_bytes: bytes, content_type: str | None = None
+        ) -> ExtractedLabel:
+            time.sleep(0.1)
+            return label()
+
+    with pytest.raises(VisionAPIError):
+        extract_label_with_timeout_sync(
+            SlowVisionService(),
+            image_bytes(),
+            "image/png",
+            timeout_seconds=0.01,
+        )
 
 
 def test_sample_script_mock_mode_returns_populated_label(

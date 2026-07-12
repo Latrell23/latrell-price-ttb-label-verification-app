@@ -491,7 +491,7 @@ def test_verify_backend_timeout_returns_502(monkeypatch) -> None:
             time.sleep(0.1)
             return extracted_label()
 
-    monkeypatch.setattr("app.routes.verify.DEFAULT_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr("app.vision.extraction.DEFAULT_TIMEOUT_SECONDS", 0.01)
 
     response = call_verify(SlowVisionService())
 

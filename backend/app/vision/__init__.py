@@ -12,6 +12,8 @@ from app.vision.service import (
     VisionParseError,
     VisionService,
     VisionServiceError,
+    extract_label_with_timeout,
+    extract_label_with_timeout_sync,
 )
 
 __all__ = [
@@ -28,4 +30,6 @@ __all__ = [
     "VisionParseError",
     "VisionService",
     "VisionServiceError",
+    "extract_label_with_timeout",
+    "extract_label_with_timeout_sync",
 ]

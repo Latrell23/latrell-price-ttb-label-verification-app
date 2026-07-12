@@ -12,6 +12,7 @@ from app.vision import (
     DEFAULT_TIMEOUT_SECONDS,
     FakeVisionService,
     GeminiVisionService,
+    extract_label_with_timeout_sync,
 )
 
 
@@ -51,7 +52,12 @@ def main() -> int:
     )
 
     # Extract the label and print a stable JSON payload for inspection.
-    label = service.extract_label(image_path.read_bytes(), _content_type_for(image_path))
+    label = extract_label_with_timeout_sync(
+        service,
+        image_path.read_bytes(),
+        _content_type_for(image_path),
+        args.timeout,
+    )
     print(json.dumps(label.model_dump(), indent=2, sort_keys=True))
     return 0
 

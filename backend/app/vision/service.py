@@ -6,6 +6,10 @@ from app.vision.errors import (
     VisionParseError,
     VisionServiceError,
 )
+from app.vision.extraction import (
+    extract_label_with_timeout,
+    extract_label_with_timeout_sync,
+)
 from app.vision.fake import FakeVisionService
 from app.vision.preprocessing import ImagePreprocessor, ProcessedImage
 from app.vision.protocols import (
@@ -29,4 +33,6 @@ __all__ = [
     "VisionParseError",
     "VisionService",
     "VisionServiceError",
+    "extract_label_with_timeout",
+    "extract_label_with_timeout_sync",
 ]

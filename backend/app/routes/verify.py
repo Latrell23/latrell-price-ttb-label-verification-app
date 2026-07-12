@@ -17,18 +17,17 @@ from app.verification import (
     BatchVerificationItem,
     BatchVerificationResponse,
     BatchVerificationSummary,
-    ExtractedLabel,
     VerificationResult,
     verify_label,
 )
 from app.vision import (
-    DEFAULT_TIMEOUT_SECONDS,
     GeminiVisionService,
     VisionAPIError,
     VisionConfigurationError,
     VisionImageValidationError,
     VisionParseError,
     VisionService,
+    extract_label_with_timeout,
 )
 
 
@@ -342,7 +341,7 @@ async def _verify_batch_item_data(
     started_at = _now_counter()
     try:
         async with semaphore:
-            extracted_label = await _extract_label_in_thread(
+            extracted_label = await extract_label_with_timeout(
                 vision_service,
                 image_bytes,
                 content_type,
@@ -367,30 +366,6 @@ async def _verify_batch_item_data(
         result=result,
         error=None,
     )
-
-
-async def _extract_label_in_thread(
-    vision_service: VisionService,
-    image_bytes: bytes,
-    content_type: str | None,
-    executor: concurrent.futures.ThreadPoolExecutor,
-) -> ExtractedLabel:
-    """Run blocking extraction in a worker thread within the backend time budget."""
-    future = executor.submit(vision_service.extract_label, image_bytes, content_type)
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + DEFAULT_TIMEOUT_SECONDS
-
-    while not future.done():
-        if loop.time() >= deadline:
-            future.cancel()
-            raise VisionAPIError("Vision model request timed out")
-        await asyncio.sleep(0.001)
-
-    try:
-        return future.result()
-    except TimeoutError as exc:
-        future.cancel()
-        raise VisionAPIError("Vision model request timed out") from exc
 
 
 @router.post("/verify", response_model=VerificationResult)
@@ -437,7 +412,7 @@ async def verify(
         resolved_vision_service = resolve_vision_service(vision_service)
         executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         try:
-            extracted_label = await _extract_label_in_thread(
+            extracted_label = await extract_label_with_timeout(
                 resolved_vision_service,
                 image_bytes,
                 image.content_type if image is not None else None,

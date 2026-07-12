@@ -19,6 +19,7 @@ from app.vision import (
     GeminiVisionService,
     ImagePreprocessor,
     VisionServiceError,
+    extract_label_with_timeout_sync,
 )
 
 
@@ -162,7 +163,12 @@ def benchmark_fixture(
 
     model_started = time.perf_counter()
     try:
-        extracted = service.extract_label(image_bytes, fixture.content_type)
+        extracted = extract_label_with_timeout_sync(
+            service,
+            image_bytes,
+            fixture.content_type,
+            config["timeout_seconds"],
+        )
         model_latency_ms = elapsed_ms(model_started)
         result = verify_label(APPLICATION, extracted)
         record.update(
