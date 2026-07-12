@@ -1,5 +1,5 @@
 import { ERROR_MESSAGES, FIELDS, MAX_BATCH_ROWS } from "./constants.js";
-import { parseResponseBody, postBatchVerification, readBatchStream } from "./api.js";
+import { isTimeoutError, parseResponseBody, postBatchVerification, readBatchStream } from "./api.js";
 import { renderBatchResults } from "./rendering.js";
 import { clearBatchFormError, showBatchFormError } from "./ui.js";
 import { validateBatchRow, validateImageFile } from "./validation.js";
@@ -357,9 +357,11 @@ export function createBatchController(elements) {
 
     try {
       const orderedClientIds = batchRows.map((row) => row.id);
-      const response = await postBatchVerification(buildBatchFormData());
+      const batchRequest = await postBatchVerification(buildBatchFormData());
+      const { response, timeout } = batchRequest;
 
       if (!response.ok) {
+        timeout.clear();
         const body = await parseResponseBody(response);
         applyBatchServerError(body);
         return;
@@ -376,12 +378,15 @@ export function createBatchController(elements) {
         onComplete() {
           finishBatchProgress(batchRows.length);
         },
+        timeout,
       });
       renderBatchResults(elements, body);
-    } catch (_error) {
+    } catch (error) {
       showBatchFormError(
         elements,
-        "Could not reach the verification service. Please check the connection and try again."
+        isTimeoutError(error)
+          ? ERROR_MESSAGES.request_timeout
+          : "Could not reach the verification service. Please check the connection and try again."
       );
     } finally {
       setBatchLoading(false, batchRows.length);

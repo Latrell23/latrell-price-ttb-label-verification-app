@@ -1,6 +1,7 @@
 const config = window.APP_CONFIG || {};
 
 export const API_BASE_URL = (config.API_BASE_URL || "http://localhost:8000").replace(/\/$/, "");
+export const FRONTEND_TIMEOUT_MS = 5000;
 export const MAX_BATCH_ROWS = 5;
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 export const SUPPORTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -33,5 +34,6 @@ export const ERROR_MESSAGES = {
   vision_extraction_failed: "The label could not be checked right now. Please try again.",
   vision_result_unreadable: "The label could not be checked right now. Please try again.",
   vision_not_configured: "The label could not be checked right now. Please try again.",
+  request_timeout: "The verification service took too long to respond. Please try again.",
   internal_error: "The label could not be checked right now. Please try again.",
 };

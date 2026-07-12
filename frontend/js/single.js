@@ -1,6 +1,6 @@
 import { ERROR_MESSAGES, FIELDS } from "./constants.js";
 import { fieldElement } from "./dom.js";
-import { parseResponseBody, postSingleVerification } from "./api.js";
+import { isTimeoutError, parseResponseBody, postSingleVerification } from "./api.js";
 import { renderResults } from "./rendering.js";
 import {
   clearErrors,
@@ -77,10 +77,12 @@ export async function submitVerification(event, elements) {
     }
 
     renderResults(elements, body);
-  } catch (_error) {
+  } catch (error) {
     showFormError(
       elements,
-      "Could not reach the verification service. Please check the connection and try again."
+      isTimeoutError(error)
+        ? ERROR_MESSAGES.request_timeout
+        : "Could not reach the verification service. Please check the connection and try again."
     );
   } finally {
     setLoading(elements, false);

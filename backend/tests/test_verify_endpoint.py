@@ -483,6 +483,23 @@ def test_verify_vision_api_error_returns_502() -> None:
     assert_no_internal_details(response)
 
 
+def test_verify_backend_timeout_returns_502(monkeypatch) -> None:
+    class SlowVisionService:
+        def extract_label(
+            self, image_bytes: bytes, content_type: str | None = None
+        ) -> ExtractedLabel:
+            time.sleep(0.1)
+            return extracted_label()
+
+    monkeypatch.setattr("app.routes.verify.DEFAULT_TIMEOUT_SECONDS", 0.01)
+
+    response = call_verify(SlowVisionService())
+
+    body = assert_shaped_error(response, 502)
+    assert body["error"]["code"] == "vision_extraction_failed"
+    assert_no_internal_details(response)
+
+
 def test_verify_vision_parse_error_returns_502() -> None:
     service = SpyVisionService(exception_factory=lambda: VisionParseError("bad json"))
 

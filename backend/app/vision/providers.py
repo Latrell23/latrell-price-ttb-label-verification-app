@@ -29,7 +29,7 @@ class GeminiVisionService:
         self.model = model or os.getenv("GEMINI_MODEL") or DEFAULT_GEMINI_MODEL
         self.timeout_seconds = timeout_seconds
         self.preprocessor = preprocessor or ImagePreprocessor()
-        self.client = client or self._build_client(api_key, timeout_seconds)
+        self.client = client or self._build_client(api_key)
 
     def extract_label(
         self, image_bytes: bytes, content_type: str | None = None
@@ -65,9 +65,7 @@ class GeminiVisionService:
         return extract_gemini_label(response)
 
     @staticmethod
-    def _build_client(
-        api_key: str | None, timeout_seconds: float
-    ) -> GeminiClientProtocol:
+    def _build_client(api_key: str | None) -> GeminiClientProtocol:
         """Build a Gemini client from environment-backed credentials."""
         resolved_api_key = (
             api_key
@@ -81,16 +79,12 @@ class GeminiVisionService:
 
         try:
             from google import genai
-            from google.genai import types
         except ImportError as exc:  # pragma: no cover - dependency guard
             raise VisionConfigurationError(
                 "google-genai is required for GeminiVisionService"
             ) from exc
 
-        return genai.Client(
-            api_key=resolved_api_key,
-            http_options=types.HttpOptions(timeout=int(timeout_seconds * 1000)),
-        )
+        return genai.Client(api_key=resolved_api_key)
 
     @staticmethod
     def _image_part(processed: ProcessedImage) -> Any:

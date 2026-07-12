@@ -22,6 +22,7 @@ from app.verification import (
     verify_label,
 )
 from app.vision import (
+    DEFAULT_TIMEOUT_SECONDS,
     GeminiVisionService,
     VisionAPIError,
     VisionConfigurationError,
@@ -374,12 +375,22 @@ async def _extract_label_in_thread(
     content_type: str | None,
     executor: concurrent.futures.ThreadPoolExecutor,
 ) -> ExtractedLabel:
-    """Run blocking extraction in a request-scoped worker thread."""
+    """Run blocking extraction in a worker thread within the backend time budget."""
     future = executor.submit(vision_service.extract_label, image_bytes, content_type)
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + DEFAULT_TIMEOUT_SECONDS
+
     while not future.done():
+        if loop.time() >= deadline:
+            future.cancel()
+            raise VisionAPIError("Vision model request timed out")
         await asyncio.sleep(0.001)
 
-    return future.result()
+    try:
+        return future.result()
+    except TimeoutError as exc:
+        future.cancel()
+        raise VisionAPIError("Vision model request timed out") from exc
 
 
 @router.post("/verify", response_model=VerificationResult)
@@ -422,12 +433,18 @@ async def verify(
             status_code = image_error.status_code
             return image_error
 
-        # Extract visible label fields and run the verification rules.
+        # Extract visible label fields within the backend timeout budget.
         resolved_vision_service = resolve_vision_service(vision_service)
-        extracted_label = resolved_vision_service.extract_label(
-            image_bytes,
-            image.content_type if image is not None else None,
-        )
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        try:
+            extracted_label = await _extract_label_in_thread(
+                resolved_vision_service,
+                image_bytes,
+                image.content_type if image is not None else None,
+                executor,
+            )
+        finally:
+            executor.shutdown(wait=False, cancel_futures=True)
         result = verify_label(application_data, extracted_label)
 
         # Attach endpoint latency to the response without changing result shape.
