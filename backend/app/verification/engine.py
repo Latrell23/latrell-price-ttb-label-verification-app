@@ -36,6 +36,12 @@ FIELD_ORDER = (
 COUNTRY_SYNONYM_GROUPS = (
     {"usa", "united states", "united states of america"},
     {"uk", "united kingdom"},
+    {"france", "french republic", "republic of france"},
+    {"italy", "italian republic", "republic of italy"},
+    {"spain", "kingdom of spain", "espana", "españa"},
+    {"germany", "federal republic of germany", "deutschland"},
+    {"portugal", "portuguese republic", "republic of portugal"},
+    {"australia", "commonwealth of australia"},
 )
 
 UNIT_FACTORS_TO_ML = {
@@ -121,8 +127,15 @@ def _compare_fuzzy_field(
     # Missing extracted values fail because there is nothing to compare.
     status = "FAIL"
     if found is not None:
-        score = _fuzzy_score(_normalize_text(expected), _normalize_text(found))
-        status = "PASS" if score >= FUZZY_THRESHOLD else "FAIL"
+        normalized_expected = _normalize_text(expected)
+        normalized_found = _normalize_text(found)
+        if len(normalized_expected) <= 4 or len(normalized_found) <= 4:
+            status = (
+                "PASS" if normalized_expected == normalized_found else "FAIL"
+            )
+        else:
+            score = _fuzzy_score(normalized_expected, normalized_found)
+            status = "PASS" if score >= FUZZY_THRESHOLD else "FAIL"
 
     return FieldResult(
         field=field,
@@ -158,7 +171,7 @@ def _compare_country(expected: str, found: str | None) -> FieldResult:
 def _compare_abv(expected: str, found: str | None) -> FieldResult:
     """Compare ABV values numerically within the configured tolerance."""
     # Parse numbers from both values before applying the tolerance check.
-    expected_value = _parse_abv(expected)
+    expected_value = _parse_abv(expected, allow_plain_number=True)
     found_value = _parse_abv(found) if found is not None else None
     status = (
         "PASS"
@@ -200,8 +213,13 @@ def _compare_net_contents(expected: str, found: str | None) -> FieldResult:
 
 
 def _compare_government_warning(expected: str, found: str | None) -> FieldResult:
-    """Compare the government warning exactly while ignoring outer whitespace."""
-    status = "PASS" if found is not None and expected.strip() == found.strip() else "FAIL"
+    """Compare the government warning exactly after whitespace collapse."""
+    status = (
+        "PASS"
+        if found is not None
+        and _normalize_government_warning(expected) == _normalize_government_warning(found)
+        else "FAIL"
+    )
     return FieldResult(
         field="government_warning",
         match_type="EXACT_CASE_SENSITIVE",
@@ -209,6 +227,11 @@ def _compare_government_warning(expected: str, found: str | None) -> FieldResult
         found=found,
         status=status,
     )
+
+
+def _normalize_government_warning(value: str) -> str:
+    """Collapse whitespace without changing case or punctuation."""
+    return re.sub(r"\s+", " ", value).strip()
 
 
 def _normalize_text(value: str) -> str:
@@ -238,16 +261,43 @@ def _countries_match(expected: str, found: str) -> bool:
     return any(expected in group and found in group for group in COUNTRY_SYNONYM_GROUPS)
 
 
-def _parse_abv(value: str | None) -> float | None:
-    """Parse the first numeric ABV value from text."""
+def _parse_abv(value: str | None, *, allow_plain_number: bool = False) -> float | None:
+    """Parse an ABV value from percent, alcohol-volume, or proof text."""
     if value is None:
         return None
 
-    match = re.search(r"\d+(?:\.\d+)?", value)
-    if match is None:
-        return None
+    percent_match = re.search(r"(?P<amount>\d+(?:\.\d+)?)\s*%", value)
+    if percent_match is not None:
+        return float(percent_match.group("amount"))
 
-    return float(match.group(0))
+    alc_volume_match = re.search(
+        r"(?:alc\.?\s*/?\s*vol\.?|alcohol\s+by\s+volume|abv)"
+        r"\D*(?P<amount>\d+(?:\.\d+)?)|"
+        r"(?P<prefix_amount>\d+(?:\.\d+)?)\D*"
+        r"(?:alc\.?\s*/?\s*vol\.?|alcohol\s+by\s+volume|abv)",
+        value,
+        re.IGNORECASE,
+    )
+    if alc_volume_match is not None:
+        amount = alc_volume_match.group("amount") or alc_volume_match.group(
+            "prefix_amount"
+        )
+        return float(amount)
+
+    proof_match = re.search(
+        r"(?P<amount>\d+(?:\.\d+)?)\s*proof\b",
+        value,
+        re.IGNORECASE,
+    )
+    if proof_match is not None:
+        return float(proof_match.group("amount")) / 2
+
+    if allow_plain_number:
+        plain_number_match = re.fullmatch(r"\s*(?P<amount>\d+(?:\.\d+)?)\s*", value)
+        if plain_number_match is not None:
+            return float(plain_number_match.group("amount"))
+
+    return None
 
 
 def _parse_net_contents_ml(value: str | None) -> float | None:

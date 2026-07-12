@@ -104,6 +104,21 @@ def test_case_only_brand_difference_passes() -> None:
     assert result_for_field(result, "brand_name").status == "PASS"
 
 
+def test_short_brand_exact_match_passes_after_normalization() -> None:
+    result = verify_label(application(brand_name="ACME"), extracted(brand_name="acme"))
+
+    assert result_for_field(result, "brand_name").status == "PASS"
+
+
+def test_short_brand_subset_match_fails() -> None:
+    result = verify_label(
+        application(brand_name="ACME"),
+        extracted(brand_name="ACME RESERVE SPECIAL EDITION"),
+    )
+
+    assert result_for_field(result, "brand_name").status == "FAIL"
+
+
 def test_brand_fails_for_unrelated_value_below_threshold() -> None:
     result = verify_label(
         application(brand_name="Acme Estate"),
@@ -166,6 +181,25 @@ def test_direct_country_equality_passes_case_insensitively() -> None:
     assert result_for_field(result, "country_of_origin").status == "PASS"
 
 
+def test_expanded_country_synonyms_pass() -> None:
+    examples = [
+        ("France", "French Republic"),
+        ("Italy", "Republic of Italy"),
+        ("Spain", "España"),
+        ("Germany", "Deutschland"),
+        ("Portugal", "Portuguese Republic"),
+        ("Australia", "Commonwealth of Australia"),
+    ]
+
+    for expected, found in examples:
+        result = verify_label(
+            application(country_of_origin=expected),
+            extracted(country_of_origin=found),
+        )
+
+        assert result_for_field(result, "country_of_origin").status == "PASS"
+
+
 def test_different_countries_fail() -> None:
     result = verify_label(
         application(country_of_origin="France"),
@@ -175,10 +209,10 @@ def test_different_countries_fail() -> None:
     assert result_for_field(result, "country_of_origin").status == "FAIL"
 
 
-def test_abv_percent_matches_plain_number() -> None:
+def test_extracted_bare_abv_number_fails_without_context() -> None:
     result = verify_label(application(abv="13.5%"), extracted(abv="13.5"))
 
-    assert result_for_field(result, "abv").status == "PASS"
+    assert result_for_field(result, "abv").status == "FAIL"
 
 
 def test_alc_by_vol_matches_plain_abv() -> None:
@@ -197,6 +231,24 @@ def test_proof_statement_abv_matches_percent() -> None:
     )
 
     assert result_for_field(result, "abv").status == "PASS"
+
+
+def test_proof_only_abv_is_divided_by_two() -> None:
+    result = verify_label(application(abv="45%"), extracted(abv="90 Proof"))
+
+    assert result_for_field(result, "abv").status == "PASS"
+
+
+def test_proof_only_does_not_match_same_numeric_abv() -> None:
+    result = verify_label(application(abv="90%"), extracted(abv="90 Proof"))
+
+    assert result_for_field(result, "abv").status == "FAIL"
+
+
+def test_bare_number_without_abv_context_fails() -> None:
+    result = verify_label(application(abv="13.5%"), extracted(abv="Batch No. 13.5"))
+
+    assert result_for_field(result, "abv").status == "FAIL"
 
 
 def test_abv_difference_within_tolerance_passes() -> None:
@@ -350,6 +402,21 @@ def test_government_warning_leading_and_trailing_whitespace_is_ignored() -> None
     result = verify_label(
         application(government_warning=WARNING),
         extracted(government_warning=f"  {WARNING}\n"),
+    )
+
+    assert result_for_field(result, "government_warning").status == "PASS"
+
+
+def test_government_warning_internal_whitespace_is_collapsed() -> None:
+    spaced_warning = WARNING.replace(
+        "SURGEON GENERAL, WOMEN SHOULD",
+        "SURGEON GENERAL,\n\tWOMEN   SHOULD",
+        1,
+    )
+
+    result = verify_label(
+        application(government_warning=WARNING),
+        extracted(government_warning=spaced_warning),
     )
 
     assert result_for_field(result, "government_warning").status == "PASS"
