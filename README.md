@@ -90,6 +90,7 @@ Open `http://localhost:5173`. The frontend reads its backend URL from
 ```js
 window.APP_CONFIG = {
   API_BASE_URL: "http://localhost:8000",
+  MAX_BATCH_ROWS: 5,
 };
 ```
 
@@ -98,6 +99,7 @@ For local development against the deployed Render backend, set:
 ```js
 window.APP_CONFIG = {
   API_BASE_URL: "https://latrell-price-ttb-label-verification-app.onrender.com",
+  MAX_BATCH_ROWS: 5,
 };
 ```
 
@@ -204,6 +206,7 @@ Example frontend config:
 ```js
 window.APP_CONFIG = {
   API_BASE_URL: "https://latrell-price-ttb-label-verification-app.onrender.com",
+  MAX_BATCH_ROWS: 5,
 };
 ```
 

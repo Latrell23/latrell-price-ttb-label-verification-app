@@ -1,8 +1,13 @@
 const config = window.APP_CONFIG || {};
 
+function positiveInteger(value, fallback) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 export const API_BASE_URL = (config.API_BASE_URL || "http://localhost:8000").replace(/\/$/, "");
 export const FRONTEND_TIMEOUT_MS = 5000;
-export const MAX_BATCH_ROWS = 5;
+export const MAX_BATCH_ROWS = positiveInteger(config.MAX_BATCH_ROWS, 5);
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 export const SUPPORTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
@@ -21,7 +26,7 @@ export const ERROR_MESSAGES = {
   missing_items: "Add at least one label.",
   malformed_items: "The batch could not be prepared. Please try again.",
   empty_batch: "Add at least one label.",
-  too_many_items: "Verify no more than 5 labels at once.",
+  too_many_items: `Verify no more than ${MAX_BATCH_ROWS} labels at once.`,
   duplicate_client_id: "The batch could not be prepared. Please try again.",
   duplicate_image_field: "The batch could not be prepared. Please try again.",
   missing_upload_fields: "Choose an image for each label.",
