@@ -5,7 +5,7 @@ fields against expected application fields. The app extracts label text from an
 uploaded image, normalizes comparable values, and returns field-level
 `PASS`/`FAIL` results with an overall `APPROVED` or `NEEDS REVIEW` status.
 
-Repository: https://github.com/AI-Native-2026-06-22-FedStack/latrell-price-ttb-label-verification-app
+Repository: https://github.com/Latrell23/latrell-price-ttb-label-verification-app
 
 ## Live Demo
 
@@ -435,7 +435,7 @@ Also review:
 ## Final Submission Checklist
 
 - Public GitHub repo is accessible:
-  https://github.com/AI-Native-2026-06-22-FedStack/latrell-price-ttb-label-verification-app
+  https://github.com/Latrell23/latrell-price-ttb-label-verification-app
 - Final frontend URL is filled into this README:
   https://ttb-label-frontend.vercel.app/
 - Backend health URL returns `status: healthy` and `vision_configured: true`.
