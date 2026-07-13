@@ -89,7 +89,7 @@ export function createBatchController(elements) {
               id="${rowId}-image"
               data-field="image"
               type="file"
-              accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+              accept="image/*"
             />
           </label>
           <p id="${rowId}-image-error" data-error-for="image" class="field-error" hidden></p>
