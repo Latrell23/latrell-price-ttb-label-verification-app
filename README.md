@@ -290,7 +290,7 @@ Measured deployed performance:
 
 | Date | Command | Sample | p50 | p95 | Result |
 | --- | --- | --- | --- | --- | --- |
-| 2026-07-12 | `backend/scripts/live_smoke_check.py --base-url https://latrell-price-ttb-label-verification-app.onrender.com` | 1 generated JPEG label | Not available | Not available | Real provider timed out at the 4.5s app-layer budget; no successful deployed p50/p95 can be claimed from that run. |
+| 2026-07-12 | `python scripts/live_checklist.py --base-url https://latrell-price-ttb-label-verification-app.onrender.com` | committed JPEG fixture | Not available | Not available | Real provider timed out at the 4.5s app-layer budget; no successful deployed p50/p95 can be claimed from that run. |
 | 2026-07-12 | `backend/scripts/benchmark_phase6.py --mock --runs 3` | deterministic fake provider | Not applicable | Not applicable | Backend/test harness passed; this validates API shape and comparison behavior, not live provider latency. |
 
 Cold-start behavior: Render free-tier services may take longer than the 5s
@@ -302,13 +302,15 @@ requests; cold starts are documented as an accepted hosting limitation.
 Run the deployed end-to-end smoke check:
 
 ```bash
-backend/.venv/bin/python backend/scripts/live_smoke_check.py \
-  --base-url https://latrell-price-ttb-label-verification-app.onrender.com
+python scripts/live_checklist.py
 ```
 
-The script generates `/tmp/ttb_sample_label.jpg`, posts it to deployed
-`/verify`, and exits non-zero unless the response is HTTP `200` with
-`results`, `overall_verdict`, and `latency_ms`.
+The script reads `LIVE_BASE_URL` when set, otherwise it targets the deployed
+Render backend. It checks `/health`, posts the committed
+`tests/fixtures/sample_label.jpg` to `/verify`, posts two labels to
+`/verify/batch`, and exits non-zero with a one-line reason if any deployed
+response is malformed. Local `GEMINI_API_KEY` or `OPENAI_API_KEY` values are
+not required because the check runs against the deployed backend.
 
 ## Deployment
 
@@ -436,7 +438,7 @@ Also review:
   https://github.com/AI-Native-2026-06-22-FedStack/latrell-price-ttb-label-verification-app
 - Final frontend URL is filled into this README:
   https://ttb-label-frontend.vercel.app/
-- Backend health URL returns `status: ok`.
+- Backend health URL returns `status: healthy` and `vision_configured: true`.
 - Single-label happy path works against the deployed backend.
 - Mismatch or needs-review path works against the deployed backend.
 - Wrong file type and empty submit return readable errors.
