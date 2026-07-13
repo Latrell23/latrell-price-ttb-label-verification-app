@@ -118,7 +118,7 @@ def test_gemini_request_uses_default_model_json_schema_and_image_part() -> None:
     data = inline_data["data"] if isinstance(inline_data, dict) else getattr(inline_data, "data")
     assert mime_type == "image/jpeg"
     assert data
-    assert call["contents"][1].startswith("Extract TTB alcohol label information")
+    assert call["contents"][1].startswith("Extract visible TTB alcohol label fields")
 
 
 def test_gemini_model_env_overrides_default(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -250,6 +250,13 @@ def test_preprocessor_does_not_upscale_small_images() -> None:
 
     assert processed.width == 300
     assert processed.height == 200
+
+
+def test_preprocessor_default_max_edge_is_latency_optimized() -> None:
+    processed = ImagePreprocessor().process(image_bytes((3200, 2400)))
+
+    assert processed.width == 1600
+    assert processed.height == 1200
 
 
 def test_invalid_image_bytes_raise_validation_error_without_api_call() -> None:

@@ -28,13 +28,27 @@ after idle may be slower than warm requests.
 - Image validation and readable error states for empty submits, unsupported
   file types, and malformed requests.
 
-## Approach
+## Approach / AI Workflow
+
+- Built with Codex as the implementation partner using the project cadence in
+  `AGENTS.MD`: plan the phase, review against requirements and edge cases, then
+  execute with tests and verification commands.
+- AI-assisted work covered backend routes, comparison logic, vision-provider
+  integration, frontend modules, tests, docs, and deployment configuration.
+- Human direction set the product requirements, tradeoffs, provider choice,
+  review feedback, deployed URLs, and acceptance priorities.
+- Review loops focused on demonstrable requirements, especially latency,
+  batch behavior, environment-secret handling, and reviewer-run commands.
+
+## Runtime Architecture
 
 - Frontend: static HTML/CSS with native browser JavaScript modules.
 - Backend: FastAPI verification API with `/health`, `/verify`, and
   `/verify/batch` routes.
 - Vision extraction: Gemini Flash through the Google AI API free-tier workflow
-  by default.
+  by default. Default model: `gemini-3.5-flash` (verified against Google's
+  current Gemini model list on 2026-07-12; Google docs last updated
+  2026-07-09).
 - Verification engine: deterministic comparison logic after vision extraction,
   including fuzzy text matching, numeric ABV comparison, unit conversion,
   country synonyms, and exact government warning comparison.
@@ -62,12 +76,27 @@ pip install -r requirements.txt
 Set local environment variables. Use `.env.example` as the reference; keep real
 values in your shell, local untracked `.env`, or deployment provider settings.
 
+| Variable | Required | Default | Purpose |
+| --- | --- | --- | --- |
+| `APP_ENV` | No | `local` | Identifies local vs production behavior; production disables default local CORS origins. |
+| `ALLOWED_ORIGINS` | Yes in production | none in production; `http://localhost:5173` locally | Comma-separated browser origins allowed by backend CORS. |
+| `GEMINI_API_KEY` | Yes for real vision | none | Primary Google GenAI credential for Gemini extraction. |
+| `GOOGLE_API_KEY` | No | none | Alternate Google GenAI credential name accepted by the backend. |
+| `GEMINI_MODEL` | No | `gemini-3.5-flash` | Gemini model used for extraction; verified against Google's model list on 2026-07-12. |
+| `MAX_BATCH_ITEMS` | No | `5` | Backend per-request batch item cap, enforced before image bytes are read. |
+| `MAX_BATCH_CONCURRENCY` | No | `3` | Maximum concurrent vision extractions inside one batch request. |
+| `API_BASE_URL` | Frontend config only | `http://localhost:8000` | Backend base URL used by `frontend/config.js` / `window.APP_CONFIG`. |
+| `MAX_BATCH_ROWS` | Frontend config only | `5` | Frontend row cap kept aligned with backend `MAX_BATCH_ITEMS`. |
+
+Example local backend env:
+
 ```bash
 export APP_ENV=local
 export ALLOWED_ORIGINS=http://localhost:5173
 export GEMINI_API_KEY=<your Gemini API key>
 export GEMINI_MODEL=gemini-3.5-flash
 export MAX_BATCH_ITEMS=5
+export MAX_BATCH_CONCURRENCY=3
 ```
 
 Start the backend:
@@ -102,6 +131,87 @@ window.APP_CONFIG = {
   MAX_BATCH_ROWS: 5,
 };
 ```
+
+## API Examples
+
+Generate a sample JPEG label for the `curl` examples:
+
+```bash
+backend/.venv/bin/python backend/scripts/run_vision_sample.py --mock >/dev/null
+```
+
+Single-label verification:
+
+```bash
+curl -sS -X POST http://localhost:8000/verify \
+  -H 'Accept: application/json' \
+  -F image=@/tmp/ttb_sample_label.jpg\;type=image/jpeg \
+  -F brand_name='Acme Estate' \
+  -F class_type='Red Wine' \
+  -F abv='13.5%' \
+  -F net_contents='750 mL' \
+  -F producer='Acme Cellars' \
+  -F country_of_origin='United States' \
+  -F government_warning='GOVERNMENT WARNING: (1) ACCORDING TO THE SURGEON GENERAL, WOMEN SHOULD NOT DRINK ALCOHOLIC BEVERAGES DURING PREGNANCY BECAUSE OF THE RISK OF BIRTH DEFECTS. (2) CONSUMPTION OF ALCOHOLIC BEVERAGES IMPAIRS YOUR ABILITY TO DRIVE A CAR OR OPERATE MACHINERY, AND MAY CAUSE HEALTH PROBLEMS.'
+```
+
+Batch verification:
+
+```bash
+curl -sS -X POST http://localhost:8000/verify/batch \
+  -H 'Accept: application/json' \
+  -F image_0=@/tmp/ttb_sample_label.jpg\;type=image/jpeg \
+  -F 'items=[{"client_id":"label-0","image_field":"image_0","brand_name":"Acme Estate","class_type":"Red Wine","abv":"13.5%","net_contents":"750 mL","producer":"Acme Cellars","country_of_origin":"United States","government_warning":"GOVERNMENT WARNING: (1) ACCORDING TO THE SURGEON GENERAL, WOMEN SHOULD NOT DRINK ALCOHOLIC BEVERAGES DURING PREGNANCY BECAUSE OF THE RISK OF BIRTH DEFECTS. (2) CONSUMPTION OF ALCOHOLIC BEVERAGES IMPAIRS YOUR ABILITY TO DRIVE A CAR OR OPERATE MACHINERY, AND MAY CAUSE HEALTH PROBLEMS."}]'
+```
+
+Success shape:
+
+```json
+{
+  "results": [
+    {
+      "field": "brand_name",
+      "match_type": "FUZZY",
+      "expected": "Acme Estate",
+      "found": "ACME ESTATE",
+      "status": "PASS"
+    }
+  ],
+  "overall_verdict": "APPROVED",
+  "latency_ms": 842.1
+}
+```
+
+Error shape:
+
+```json
+{
+  "error": {
+    "code": "missing_image",
+    "message": "The image file field is required.",
+    "details": [
+      {
+        "field": "image",
+        "message": "Upload one label image."
+      }
+    ]
+  }
+}
+```
+
+## Comparison Rules
+
+Comparison logic lives in `backend/app/verification/engine.py`.
+
+| Field | Strategy |
+| --- | --- |
+| `brand_name` | Fuzzy text match after whitespace collapse and case-folding; threshold `90`. |
+| `class_type` | Fuzzy text match after whitespace collapse and case-folding; threshold `90`. |
+| `producer` | Fuzzy text match after whitespace collapse and case-folding; threshold `90`. |
+| `abv` | Numeric ABV parse; pass when values differ by no more than `±0.1`. |
+| `net_contents` | Unit-normalized milliliter comparison; supports mL, L, cL, and fluid ounces; tolerance `±1 mL`. |
+| `country_of_origin` | Punctuation-insensitive country normalization plus synonym groups such as USA / United States. |
+| `government_warning` | Exact, case-sensitive comparison after whitespace collapse. |
 
 ## Running Tests
 
@@ -148,6 +258,8 @@ Run the repeatable benchmark with the deterministic fake provider:
 backend/.venv/bin/python backend/scripts/benchmark_phase6.py --mock --runs 3 --jsonl /tmp/ttb-phase6.jsonl
 ```
 
+## Performance
+
 Run the benchmark against Gemini free-tier credentials:
 
 ```bash
@@ -174,6 +286,30 @@ cold starts.
 | API validation failures | <= 250 ms and no vision call |
 | Batch first item result | <= 5000 ms under configured concurrency |
 
+Measured deployed performance:
+
+| Date | Command | Sample | p50 | p95 | Result |
+| --- | --- | --- | --- | --- | --- |
+| 2026-07-12 | `backend/scripts/live_smoke_check.py --base-url https://latrell-price-ttb-label-verification-app.onrender.com` | 1 generated JPEG label | Not available | Not available | Real provider timed out at the 4.5s app-layer budget; no successful deployed p50/p95 can be claimed from that run. |
+| 2026-07-12 | `backend/scripts/benchmark_phase6.py --mock --runs 3` | deterministic fake provider | Not applicable | Not applicable | Backend/test harness passed; this validates API shape and comparison behavior, not live provider latency. |
+
+Cold-start behavior: Render free-tier services may take longer than the 5s
+warm-request target after idle spin-down. The latency SLA is evaluated on warm
+requests; cold starts are documented as an accepted hosting limitation.
+
+## Live Smoke Check
+
+Run the deployed end-to-end smoke check:
+
+```bash
+backend/.venv/bin/python backend/scripts/live_smoke_check.py \
+  --base-url https://latrell-price-ttb-label-verification-app.onrender.com
+```
+
+The script generates `/tmp/ttb_sample_label.jpg`, posts it to deployed
+`/verify`, and exits non-zero unless the response is HTTP `200` with
+`results`, `overall_verdict`, and `latency_ms`.
+
 ## Deployment
 
 Backend on Render:
@@ -191,7 +327,8 @@ Backend on Render:
    - `APP_ENV=production`
    - `ALLOWED_ORIGINS=https://ttb-label-frontend.vercel.app`
    - `GEMINI_API_KEY=<provider secret>`
-   - `GEMINI_MODEL=gemini-3.5-flash`
+   - `GEMINI_MODEL=gemini-3.5-flash` (verified against Google's model list on
+     2026-07-12)
    - `MAX_BATCH_ITEMS=5`
 
 Frontend on Vercel or another static host:
@@ -219,6 +356,16 @@ window.APP_CONFIG = {
 - Gemini Flash through the Google AI API free-tier workflow is the intended
   production vision path.
 - The production frontend origin is `https://ttb-label-frontend.vercel.app`.
+
+## Tradeoffs
+
+| Tradeoff | Reason |
+| --- | --- |
+| Batch cap defaults to `5` | Keeps memory and concurrent provider calls bounded on free-tier hosting. |
+| Backend timeout is enforced at the app layer | Gemini rejects manual SDK deadlines below 10s, but the app must return within the 4.5s budget. |
+| Gemini is the only production provider | Simpler deployment and avoids unsafe cross-provider model defaults. |
+| Static frontend config is committed | Vercel static hosting has no runtime server env; public backend URL and row cap are safe client config. |
+| No authentication or persistence | The proof of concept focuses on demonstrable label verification behavior. |
 
 ## Limitations
 

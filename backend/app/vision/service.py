@@ -1,4 +1,8 @@
-from app.vision.constants import DEFAULT_GEMINI_MODEL, DEFAULT_TIMEOUT_SECONDS
+from app.vision.constants import (
+    DEFAULT_GEMINI_MODEL,
+    DEFAULT_MAX_IMAGE_EDGE,
+    DEFAULT_TIMEOUT_SECONDS,
+)
 from app.vision.errors import (
     VisionAPIError,
     VisionConfigurationError,
@@ -22,6 +26,7 @@ from app.vision.providers import GeminiVisionService
 __all__ = [
     "DEFAULT_TIMEOUT_SECONDS",
     "DEFAULT_GEMINI_MODEL",
+    "DEFAULT_MAX_IMAGE_EDGE",
     "FakeVisionService",
     "GeminiClientProtocol",
     "GeminiVisionService",

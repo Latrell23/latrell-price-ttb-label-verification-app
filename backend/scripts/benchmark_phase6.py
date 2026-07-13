@@ -14,6 +14,7 @@ sys.path.insert(0, str(BACKEND_DIR))
 from app.verification import ApplicationData, verify_label
 from app.vision import (
     DEFAULT_GEMINI_MODEL,
+    DEFAULT_MAX_IMAGE_EDGE,
     DEFAULT_TIMEOUT_SECONDS,
     FakeVisionService,
     GeminiVisionService,
@@ -62,7 +63,7 @@ def main() -> int:
     parser.add_argument("--mock", action="store_true", help="Use FakeVisionService.")
     parser.add_argument("--model", default=DEFAULT_GEMINI_MODEL)
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_SECONDS)
-    parser.add_argument("--max-edge", type=int, default=2048)
+    parser.add_argument("--max-edge", type=int, default=DEFAULT_MAX_IMAGE_EDGE)
     parser.add_argument("--jpeg-quality", type=int, default=85)
     parser.add_argument("--jsonl", type=Path, help="Optional path for per-run JSONL output.")
     args = parser.parse_args()
