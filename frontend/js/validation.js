@@ -1,6 +1,12 @@
 import { FIELDS, MAX_UPLOAD_BYTES, SUPPORTED_IMAGE_TYPES } from "./constants.js";
 import { fieldElement } from "./dom.js";
 
+const ABV_MESSAGE = "Enter ABV as a percent or proof, such as 13.5% or 27 proof.";
+const NET_CONTENTS_MESSAGE = "Enter net contents with a number and unit, such as 750 mL.";
+
+const ABV_PATTERN = /^(?:\d+(?:\.\d+)?\s*(?:%|percent|percent\s+abv|%\s*abv|abv)?|\d+(?:\.\d+)?\s*proof)$/i;
+const NET_CONTENTS_PATTERN = /^\d+(?:\.\d+)?\s*(?:ml|milliliter|milliliters|l|liter|liters|cl|oz|fl\s*oz|fluid\s+ounce|fluid\s+ounces)$/i;
+
 // Validates one selected image before sending it to the backend.
 export function validateImageFile(file) {
   if (!file) {
@@ -18,6 +24,38 @@ export function validateImageFile(file) {
   return "";
 }
 
+export function validateAbv(value) {
+  const normalized = value.trim();
+  if (normalized === "") {
+    return "Complete this field.";
+  }
+  if (!ABV_PATTERN.test(normalized)) {
+    return ABV_MESSAGE;
+  }
+  return "";
+}
+
+export function validateNetContents(value) {
+  const normalized = value.trim();
+  if (normalized === "") {
+    return "Complete this field.";
+  }
+  if (!NET_CONTENTS_PATTERN.test(normalized)) {
+    return NET_CONTENTS_MESSAGE;
+  }
+  return "";
+}
+
+function validateApplicationField(field, value) {
+  if (field.name === "abv") {
+    return validateAbv(value);
+  }
+  if (field.name === "net_contents") {
+    return validateNetContents(value);
+  }
+  return value.trim() === "" ? "Complete this field." : "";
+}
+
 // Returns validation errors for the single-label form.
 export function validateSingleInputs(elements) {
   const errors = [];
@@ -32,8 +70,9 @@ export function validateSingleInputs(elements) {
   }
 
   FIELDS.forEach((field) => {
-    if (fieldElement(field.name).value.trim() === "") {
-      errors.push({ field: field.name, message: "Complete this field." });
+    const error = validateApplicationField(field, fieldElement(field.name).value);
+    if (error) {
+      errors.push({ field: field.name, message: error });
     }
   });
 
@@ -55,8 +94,9 @@ export function validateBatchRow(row, rowField) {
   }
 
   FIELDS.forEach((field) => {
-    if (rowField(row, field.name).value.trim() === "") {
-      errors.push({ field: field.name, message: "Complete this field." });
+    const error = validateApplicationField(field, rowField(row, field.name).value);
+    if (error) {
+      errors.push({ field: field.name, message: error });
     }
   });
 
