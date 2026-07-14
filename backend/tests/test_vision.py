@@ -143,7 +143,7 @@ def test_openai_request_uses_env_model_schema_and_base64_image(
     content = call["input"][0]["content"]
     assert content[0]["text"].startswith("Extract visible TTB alcohol label fields")
     assert content[1]["type"] == "input_image"
-    assert content[1]["detail"] == "low"
+    assert content[1]["detail"] == "high"
     prefix, encoded = content[1]["image_url"].split(",", 1)
     assert prefix == "data:image/jpeg;base64"
     assert base64.b64decode(encoded).startswith(b"\xff\xd8")
@@ -374,9 +374,9 @@ def test_preprocessor_accepts_heic_uploads() -> None:
 def test_preprocessor_default_max_edge_is_latency_optimized() -> None:
     processed = ImagePreprocessor().process(image_bytes((3200, 2400)))
 
-    assert DEFAULT_JPEG_QUALITY == 78
-    assert processed.width == 1024
-    assert processed.height == 768
+    assert DEFAULT_JPEG_QUALITY == 82
+    assert processed.width == 1280
+    assert processed.height == 960
 
 
 def test_invalid_image_bytes_raise_validation_error_without_api_call() -> None:
