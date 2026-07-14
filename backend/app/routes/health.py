@@ -9,7 +9,7 @@ router = APIRouter()
 
 def _vision_configured() -> bool:
     """Return whether the deployed vision provider has usable credentials."""
-    return bool(os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"))
+    return bool(os.getenv("OPENAI_API_KEY") and os.getenv("OPENAI_MODEL"))
 
 
 @router.get("/health")

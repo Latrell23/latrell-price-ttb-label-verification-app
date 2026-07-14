@@ -45,10 +45,9 @@ after idle may be slower than warm requests.
 - Frontend: static HTML/CSS with native browser JavaScript modules.
 - Backend: FastAPI verification API with `/health`, `/verify`, and
   `/verify/batch` routes.
-- Vision extraction: Gemini Flash through the Google AI API free-tier workflow
-  by default. Default model: `gemini-3.5-flash` (verified against Google's
-  current Gemini model list on 2026-07-12; Google docs last updated
-  2026-07-09).
+- Vision extraction: OpenAI Responses API with image input and Pydantic
+  Structured Outputs. The production model is selected through
+  `OPENAI_MODEL`; the repository does not hardcode a model ID.
 - Verification engine: deterministic comparison logic after vision extraction,
   including fuzzy text matching, numeric ABV comparison, unit conversion,
   country synonyms, and exact government warning comparison.
@@ -58,7 +57,7 @@ after idle may be slower than warm requests.
 - Python 3.12.8
 - FastAPI, Uvicorn, Pytest, HTTPX
 - Pillow, RapidFuzz
-- Google GenAI / Gemini API
+- OpenAI Responses API
 - Native browser JavaScript modules
 - Render for backend deployment
 - Vercel
@@ -80,9 +79,9 @@ values in your shell, local untracked `.env`, or deployment provider settings.
 | --- | --- | --- | --- |
 | `APP_ENV` | No | `local` | Identifies local vs production behavior; production disables default local CORS origins. |
 | `ALLOWED_ORIGINS` | Yes in production | none in production; `http://localhost:5173` locally | Comma-separated browser origins allowed by backend CORS. |
-| `GEMINI_API_KEY` | Yes for real vision | none | Primary Google GenAI credential for Gemini extraction. |
-| `GOOGLE_API_KEY` | No | none | Alternate Google GenAI credential name accepted by the backend. |
-| `GEMINI_MODEL` | No | `gemini-3.5-flash` | Gemini model used for extraction; verified against Google's model list on 2026-07-12. |
+| `OPENAI_API_KEY` | Yes for real vision | none | OpenAI API credential used for label extraction. |
+| `OPENAI_MODEL` | Yes for real vision | none | OpenAI vision-capable model selected by the deployer. No model fallback is hardcoded. |
+| `OPENAI_REASONING_EFFORT` | No | none | Optional Responses API reasoning effort for models that support it; use the lowest supported value for latency-focused runs, such as `minimal` on `gpt-5-nano`. |
 | `MAX_BATCH_ITEMS` | No | `5` | Backend per-request batch item cap, enforced before image bytes are read. |
 | `MAX_BATCH_CONCURRENCY` | No | `3` | Maximum concurrent vision extractions inside one batch request. |
 | `API_BASE_URL` | Frontend config only | `http://localhost:8000` | Backend base URL used by `frontend/config.js` / `window.APP_CONFIG`. |
@@ -93,8 +92,9 @@ Example local backend env:
 ```bash
 export APP_ENV=local
 export ALLOWED_ORIGINS=http://localhost:5173
-export GEMINI_API_KEY=<your Gemini API key>
-export GEMINI_MODEL=gemini-3.5-flash
+export OPENAI_API_KEY=<your OpenAI API key>
+export OPENAI_MODEL=<your vision-capable OpenAI model>
+export OPENAI_REASONING_EFFORT=minimal
 export MAX_BATCH_ITEMS=5
 export MAX_BATCH_CONCURRENCY=3
 ```
@@ -239,10 +239,12 @@ Run the vision sample script with mock extraction data:
 backend/.venv/bin/python backend/scripts/run_vision_sample.py --mock
 ```
 
-Call the real Gemini vision service:
+Call the real OpenAI vision service:
 
 ```bash
-export GEMINI_API_KEY=<your Gemini API key>
+export OPENAI_API_KEY=<your OpenAI API key>
+export OPENAI_MODEL=<your vision-capable OpenAI model>
+export OPENAI_REASONING_EFFORT=minimal
 backend/.venv/bin/python backend/scripts/run_vision_sample.py
 ```
 
@@ -260,11 +262,13 @@ backend/.venv/bin/python backend/scripts/benchmark_phase6.py --mock --runs 3 --j
 
 ## Performance
 
-Run the benchmark against Gemini free-tier credentials:
+Run the benchmark against OpenAI credentials:
 
 ```bash
-export GEMINI_API_KEY=<your Gemini API key>
-backend/.venv/bin/python backend/scripts/benchmark_phase6.py --runs 30 --jsonl /tmp/ttb-phase6-gemini.jsonl
+export OPENAI_API_KEY=<your OpenAI API key>
+export OPENAI_MODEL=<your vision-capable OpenAI model>
+export OPENAI_REASONING_EFFORT=minimal
+backend/.venv/bin/python backend/scripts/benchmark_phase6.py --runs 30 --jsonl /tmp/ttb-phase6-openai.jsonl
 ```
 
 Tune image settings without changing application code:
@@ -309,8 +313,8 @@ The script reads `LIVE_BASE_URL` when set, otherwise it targets the deployed
 Render backend. It checks `/health`, posts the committed
 `tests/fixtures/sample_label.jpg` to `/verify`, posts two labels to
 `/verify/batch`, and exits non-zero with a one-line reason if any deployed
-response is malformed. Local `GEMINI_API_KEY` or `OPENAI_API_KEY` values are
-not required because the check runs against the deployed backend.
+response is malformed. Local OpenAI credentials are not required because the
+check runs against the deployed backend.
 
 ## Deployment
 
@@ -328,9 +332,9 @@ Backend on Render:
 4. Add production environment variables in Render:
    - `APP_ENV=production`
    - `ALLOWED_ORIGINS=https://ttb-label-frontend.vercel.app`
-   - `GEMINI_API_KEY=<provider secret>`
-   - `GEMINI_MODEL=gemini-3.5-flash` (verified against Google's model list on
-     2026-07-12)
+   - `OPENAI_API_KEY=<provider secret>`
+   - `OPENAI_MODEL=<your vision-capable OpenAI model>`
+   - `OPENAI_REASONING_EFFORT=minimal`
    - `MAX_BATCH_ITEMS=5`
 
 Frontend on Vercel or another static host:
@@ -355,8 +359,8 @@ window.APP_CONFIG = {
 - Real credentials are managed outside git in local shell variables, untracked
   local env files, or Render/Vercel environment settings.
 - `.env.example` remains committed with placeholders only.
-- Gemini Flash through the Google AI API free-tier workflow is the intended
-  production vision path.
+- OpenAI is the only production vision provider, and the deployer selects its
+  model through `OPENAI_MODEL`.
 - The production frontend origin is `https://ttb-label-frontend.vercel.app`.
 
 ## Tradeoffs
@@ -364,8 +368,8 @@ window.APP_CONFIG = {
 | Tradeoff | Reason |
 | --- | --- |
 | Batch cap defaults to `5` | Keeps memory and concurrent provider calls bounded on free-tier hosting. |
-| Backend timeout is enforced at the app layer | Gemini rejects manual SDK deadlines below 10s, but the app must return within the 4.5s budget. |
-| Gemini is the only production provider | Simpler deployment and avoids unsafe cross-provider model defaults. |
+| Backend and SDK timeouts are both enforced | The OpenAI client uses the 4.5s deadline with retries disabled, while the app-layer guard preserves the endpoint budget. |
+| OpenAI is the only production provider | Keeps deployment simple while requiring the model choice to be explicit in the environment. |
 | Static frontend config is committed | Vercel static hosting has no runtime server env; public backend URL and row cap are safe client config. |
 | No authentication or persistence | The proof of concept focuses on demonstrable label verification behavior. |
 
@@ -407,8 +411,8 @@ git check-ignore -v .env .env.local .env.production
 git ls-files | rg '(^|/)\.env($|\.)'
 git ls-files | rg '(^|/)\.env[^/]*$'
 git log --all --name-only --pretty=format: | rg '(^|/)\.env($|\.)|(^|/)\.env[^/]*$'
-rg -n --hidden --glob '!.git/**' --glob '!backend/.venv/**' --glob '!node_modules/**' '(api[_-]?key|secret|token|password|GEMINI_API_KEY|AIza)' .
-git grep -n -I -E '(api[_-]?key|secret|token|password|GEMINI_API_KEY|AIza)' $(git rev-list --all) -- . ':!backend/.venv/**' ':!node_modules/**'
+rg -n --hidden --glob '!.git/**' --glob '!backend/.venv/**' --glob '!node_modules/**' '(api[_-]?key|secret|token|password|OPENAI_API_KEY|sk-[A-Za-z0-9_-]+)' .
+git grep -n -I -E '(api[_-]?key|secret|token|password|OPENAI_API_KEY|sk-[A-Za-z0-9_-]+)' $(git rev-list --all) -- . ':!backend/.venv/**' ':!node_modules/**'
 git diff --check
 backend/.venv/bin/pytest
 ```

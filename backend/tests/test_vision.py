@@ -1,7 +1,8 @@
-from io import BytesIO
+import base64
 import json
 import sys
 import time
+from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -10,11 +11,10 @@ import pytest
 
 from app.verification.models import ExtractedLabel
 from app.vision import (
-    DEFAULT_GEMINI_MODEL,
     DEFAULT_TIMEOUT_SECONDS,
     FakeVisionService,
-    GeminiVisionService,
     ImagePreprocessor,
+    OpenAIVisionService,
     VisionAPIError,
     VisionConfigurationError,
     VisionImageValidationError,
@@ -32,22 +32,27 @@ WARNING = (
 )
 
 
-class FakeGeminiModels:
+@pytest.fixture(autouse=True)
+def configured_openai_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_MODEL", "test-model")
+
+
+class FakeOpenAIResponses:
     def __init__(self, response: Any | None = None, exception: Exception | None = None):
         self.response = response
         self.exception = exception
         self.calls: list[dict[str, Any]] = []
 
-    def generate_content(self, **kwargs: Any) -> Any:
+    def parse(self, **kwargs: Any) -> Any:
         self.calls.append(kwargs)
         if self.exception is not None:
             raise self.exception
         return self.response
 
 
-class FakeGeminiClient:
+class FakeOpenAIClient:
     def __init__(self, response: Any | None = None, exception: Exception | None = None):
-        self.models = FakeGeminiModels(response, exception)
+        self.responses = FakeOpenAIResponses(response, exception)
 
 
 def label(**overrides: Any) -> ExtractedLabel:
@@ -77,103 +82,134 @@ def image_bytes(size: tuple[int, int] = (320, 240), mode: str = "RGB") -> bytes:
     return output.getvalue()
 
 
-def gemini_response(parsed: Any | None = None, text: str | None = None) -> SimpleNamespace:
-    return SimpleNamespace(parsed=parsed, text=text)
+def openai_response(parsed: Any | None = None) -> SimpleNamespace:
+    return SimpleNamespace(output_parsed=parsed)
 
 
-def test_gemini_service_returns_parsed_extracted_label() -> None:
+def test_openai_service_returns_parsed_extracted_label() -> None:
     expected = label()
-    client = FakeGeminiClient(gemini_response(parsed=expected))
-    service = GeminiVisionService(client=client)
+    client = FakeOpenAIClient(openai_response(parsed=expected))
+    service = OpenAIVisionService(client=client, model="test-model")
 
     actual = service.extract_label(image_bytes(), "image/png")
 
     assert actual == expected
 
 
-def test_gemini_request_uses_default_model_json_schema_and_image_part() -> None:
-    client = FakeGeminiClient(gemini_response(parsed=label()))
-    service = GeminiVisionService(client=client)
+def test_openai_request_uses_env_model_schema_and_base64_image(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_MODEL", "vision-test-model")
+    client = FakeOpenAIClient(openai_response(parsed=label()))
+    service = OpenAIVisionService(client=client)
 
     service.extract_label(image_bytes(), "image/png")
 
-    call = client.models.calls[0]
-    assert call["model"] == "gemini-3.5-flash"
-    assert DEFAULT_GEMINI_MODEL == "gemini-3.5-flash"
+    call = client.responses.calls[0]
+    assert call["model"] == "vision-test-model"
     assert DEFAULT_TIMEOUT_SECONDS == 4.5
-    assert call["config"]["response_mime_type"] == "application/json"
-    assert call["config"]["response_schema"] is ExtractedLabel
-    assert call["config"]["temperature"] == 0
-    image_part = call["contents"][0]
-    inline_data = (
-        image_part["inline_data"]
-        if isinstance(image_part, dict)
-        else getattr(image_part, "inline_data")
+    assert call["text_format"] is ExtractedLabel
+    assert call["store"] is False
+    content = call["input"][0]["content"]
+    assert content[0]["text"].startswith("Extract visible TTB alcohol label fields")
+    assert content[1]["type"] == "input_image"
+    assert content[1]["detail"] == "high"
+    prefix, encoded = content[1]["image_url"].split(",", 1)
+    assert prefix == "data:image/jpeg;base64"
+    assert base64.b64decode(encoded).startswith(b"\xff\xd8")
+
+
+def test_openai_model_is_read_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_MODEL", "openai-test")
+    service = OpenAIVisionService(
+        client=FakeOpenAIClient(openai_response(parsed=label()))
     )
-    mime_type = (
-        inline_data["mime_type"]
-        if isinstance(inline_data, dict)
-        else getattr(inline_data, "mime_type")
-    )
-    data = inline_data["data"] if isinstance(inline_data, dict) else getattr(inline_data, "data")
-    assert mime_type == "image/jpeg"
-    assert data
-    assert call["contents"][1].startswith("Extract visible TTB alcohol label fields")
+
+    assert service.model == "openai-test"
 
 
-def test_gemini_model_env_overrides_default(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("GEMINI_MODEL", "gemini-test")
-    service = GeminiVisionService(client=FakeGeminiClient(gemini_response(parsed=label())))
+def test_openai_reasoning_effort_is_optional_and_env_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_REASONING_EFFORT", "none")
+    client = FakeOpenAIClient(openai_response(parsed=label()))
+    service = OpenAIVisionService(client=client)
 
-    assert service.model == "gemini-test"
+    service.extract_label(image_bytes(), "image/png")
 
-
-def test_gemini_service_parses_json_text_response() -> None:
-    expected = label()
-    client = FakeGeminiClient(gemini_response(text=expected.model_dump_json()))
-    service = GeminiVisionService(client=client)
-
-    actual = service.extract_label(image_bytes(), "image/png")
-
-    assert actual == expected
+    assert client.responses.calls[0]["reasoning"] == {"effort": "none"}
 
 
-def test_gemini_invalid_json_raises_parse_error() -> None:
-    service = GeminiVisionService(client=FakeGeminiClient(gemini_response(text="not json")))
-
-    with pytest.raises(VisionParseError):
-        service.extract_label(image_bytes())
-
-
-def test_gemini_malformed_structured_output_raises_parse_error() -> None:
-    service = GeminiVisionService(
-        client=FakeGeminiClient(gemini_response(parsed={"brand_name": "Acme"}))
+def test_openai_malformed_structured_output_raises_parse_error() -> None:
+    service = OpenAIVisionService(
+        client=FakeOpenAIClient(openai_response(parsed={"brand_name": "Acme"})),
+        model="test-model",
     )
 
     with pytest.raises(VisionParseError):
         service.extract_label(image_bytes())
 
 
-def test_gemini_sdk_exception_translates_to_api_error() -> None:
-    service = GeminiVisionService(client=FakeGeminiClient(exception=RuntimeError("quota")))
+def test_openai_sdk_exception_translates_to_api_error() -> None:
+    service = OpenAIVisionService(
+        client=FakeOpenAIClient(exception=RuntimeError("quota")),
+        model="test-model",
+    )
 
     with pytest.raises(VisionAPIError):
         service.extract_label(image_bytes())
 
 
-def test_gemini_missing_key_raises_configuration_error(
+def test_openai_missing_key_raises_configuration_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("OPENAI_MODEL", "test-model")
 
     with pytest.raises(VisionConfigurationError):
-        GeminiVisionService()
+        OpenAIVisionService()
+
+
+def test_openai_missing_model_raises_configuration_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OPENAI_MODEL", raising=False)
+
+    with pytest.raises(VisionConfigurationError):
+        OpenAIVisionService(client=FakeOpenAIClient(openai_response(parsed=label())))
+
+
+def test_openai_client_disables_retries_and_uses_service_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import openai
+
+    captured: dict[str, Any] = {}
+
+    def fake_openai(**kwargs: Any) -> FakeOpenAIClient:
+        captured.update(kwargs)
+        return FakeOpenAIClient(openai_response(parsed=label()))
+
+    monkeypatch.setattr(openai, "OpenAI", fake_openai)
+    service = OpenAIVisionService(
+        api_key="test-key",
+        model="test-model",
+        timeout_seconds=1.25,
+    )
+
+    assert isinstance(service.client, FakeOpenAIClient)
+    assert captured == {
+        "api_key": "test-key",
+        "timeout": 1.25,
+        "max_retries": 0,
+    }
 
 
 def test_unknown_fields_remain_none() -> None:
     expected = label(producer=None, country_of_origin=None)
-    service = GeminiVisionService(client=FakeGeminiClient(gemini_response(parsed=expected)))
+    service = OpenAIVisionService(
+        client=FakeOpenAIClient(openai_response(parsed=expected))
+    )
 
     actual = service.extract_label(image_bytes())
 
@@ -182,7 +218,9 @@ def test_unknown_fields_remain_none() -> None:
 
 
 def test_government_warning_is_preserved_verbatim() -> None:
-    service = GeminiVisionService(client=FakeGeminiClient(gemini_response(parsed=label())))
+    service = OpenAIVisionService(
+        client=FakeOpenAIClient(openai_response(parsed=label()))
+    )
 
     actual = service.extract_label(image_bytes())
 
@@ -190,8 +228,10 @@ def test_government_warning_is_preserved_verbatim() -> None:
 
 
 def test_incomplete_government_warning_can_return_none() -> None:
-    service = GeminiVisionService(
-        client=FakeGeminiClient(gemini_response(parsed=label(government_warning=None)))
+    service = OpenAIVisionService(
+        client=FakeOpenAIClient(
+            openai_response(parsed=label(government_warning=None))
+        )
     )
 
     actual = service.extract_label(image_bytes())
@@ -206,7 +246,9 @@ def test_partial_blurry_response_returns_partial_label() -> None:
         government_warning=None,
         extraction_confidence=0.36,
     )
-    service = GeminiVisionService(client=FakeGeminiClient(gemini_response(parsed=partial)))
+    service = OpenAIVisionService(
+        client=FakeOpenAIClient(openai_response(parsed=partial))
+    )
 
     actual = service.extract_label(image_bytes())
 
@@ -227,7 +269,9 @@ def test_non_label_image_returns_null_fields_and_low_confidence() -> None:
         raw_text=None,
         extraction_confidence=0.0,
     )
-    service = GeminiVisionService(client=FakeGeminiClient(gemini_response(parsed=non_label)))
+    service = OpenAIVisionService(
+        client=FakeOpenAIClient(openai_response(parsed=non_label))
+    )
 
     actual = service.extract_label(image_bytes())
 
@@ -260,24 +304,63 @@ def test_preprocessor_default_max_edge_is_latency_optimized() -> None:
 
 
 def test_invalid_image_bytes_raise_validation_error_without_api_call() -> None:
-    client = FakeGeminiClient(gemini_response(parsed=label()))
-    service = GeminiVisionService(client=client)
+    client = FakeOpenAIClient(openai_response(parsed=label()))
+    service = OpenAIVisionService(client=client)
 
     with pytest.raises(VisionImageValidationError):
         service.extract_label(b"not an image")
 
-    assert client.models.calls == []
+    assert client.responses.calls == []
 
 
 def test_api_timeout_translates_to_service_exception() -> None:
-    service = GeminiVisionService(client=FakeGeminiClient(exception=TimeoutError("slow")))
+    service = OpenAIVisionService(
+        client=FakeOpenAIClient(exception=TimeoutError("slow"))
+    )
 
     with pytest.raises(VisionAPIError):
         service.extract_label(image_bytes())
 
 
+def test_openai_api_timeout_translates_to_service_exception() -> None:
+    class APITimeoutError(Exception):
+        pass
+
+    service = OpenAIVisionService(
+        client=FakeOpenAIClient(exception=APITimeoutError("slow"))
+    )
+
+    with pytest.raises(VisionAPIError, match="timed out"):
+        service.extract_label(image_bytes())
+
+
 def test_missing_parsed_output_raises_parse_error() -> None:
-    service = GeminiVisionService(client=FakeGeminiClient(gemini_response()))
+    service = OpenAIVisionService(client=FakeOpenAIClient(openai_response()))
+
+    with pytest.raises(VisionParseError):
+        service.extract_label(image_bytes())
+
+
+def test_openai_refusal_without_parsed_output_raises_parse_error() -> None:
+    refusal = SimpleNamespace(
+        output_parsed=None,
+        output=[{"type": "message", "content": [{"type": "refusal"}]}],
+    )
+    service = OpenAIVisionService(client=FakeOpenAIClient(refusal))
+
+    with pytest.raises(VisionParseError):
+        service.extract_label(image_bytes())
+
+
+@pytest.mark.parametrize(
+    "exception_name",
+    ["ContentFilterFinishReasonError", "LengthFinishReasonError"],
+)
+def test_incomplete_openai_structured_output_raises_parse_error(
+    exception_name: str,
+) -> None:
+    sdk_exception = type(exception_name, (Exception,), {})("incomplete")
+    service = OpenAIVisionService(client=FakeOpenAIClient(exception=sdk_exception))
 
     with pytest.raises(VisionParseError):
         service.extract_label(image_bytes())

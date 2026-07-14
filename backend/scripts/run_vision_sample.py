@@ -8,10 +8,9 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_DIR))
 
 from app.vision import (
-    DEFAULT_GEMINI_MODEL,
     DEFAULT_TIMEOUT_SECONDS,
     FakeVisionService,
-    GeminiVisionService,
+    OpenAIVisionService,
     extract_label_with_timeout_sync,
 )
 
@@ -29,7 +28,7 @@ def main() -> int:
     """Run a sample label extraction against a generated or provided image."""
     parser = argparse.ArgumentParser(
         description=(
-            "Run GeminiVisionService against a label image. If no image path is "
+            "Run OpenAIVisionService against a label image. If no image path is "
             "provided, a sample label image is generated under /tmp."
         )
     )
@@ -37,9 +36,8 @@ def main() -> int:
     parser.add_argument(
         "--mock",
         action="store_true",
-        help="Use deterministic mock extraction data instead of calling Gemini",
+        help="Use deterministic mock extraction data instead of calling OpenAI",
     )
-    parser.add_argument("--model", default=DEFAULT_GEMINI_MODEL)
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_SECONDS)
     args = parser.parse_args()
 
@@ -48,7 +46,7 @@ def main() -> int:
     service = (
         FakeVisionService()
         if args.mock
-        else GeminiVisionService(model=args.model, timeout_seconds=args.timeout)
+        else OpenAIVisionService(timeout_seconds=args.timeout)
     )
 
     # Extract the label and print a stable JSON payload for inspection.

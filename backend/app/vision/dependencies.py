@@ -1,7 +1,7 @@
 from collections.abc import Callable
 
 from app.vision.protocols import VisionService
-from app.vision.providers import GeminiVisionService
+from app.vision.providers import OpenAIVisionService
 
 
 VisionServiceDependency = VisionService | Callable[[], VisionService]
@@ -9,7 +9,7 @@ VisionServiceDependency = VisionService | Callable[[], VisionService]
 
 def get_vision_service() -> Callable[[], VisionService]:
     """Return the default production vision service factory."""
-    return GeminiVisionService
+    return OpenAIVisionService
 
 
 def resolve_vision_service(

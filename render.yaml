@@ -12,9 +12,11 @@ services:
         value: production
       - key: ALLOWED_ORIGINS
         value: https://ttb-label-frontend.vercel.app
-      - key: GEMINI_API_KEY
+      - key: OPENAI_API_KEY
         sync: false
-      - key: GEMINI_MODEL
-        value: gemini-3.5-flash
+      - key: OPENAI_MODEL
+        sync: false
+      - key: OPENAI_REASONING_EFFORT
+        sync: false
       - key: MAX_BATCH_ITEMS
         value: "5"

@@ -13,11 +13,10 @@ sys.path.insert(0, str(BACKEND_DIR))
 
 from app.verification import ApplicationData, verify_label
 from app.vision import (
-    DEFAULT_GEMINI_MODEL,
     DEFAULT_MAX_IMAGE_EDGE,
     DEFAULT_TIMEOUT_SECONDS,
     FakeVisionService,
-    GeminiVisionService,
+    OpenAIVisionService,
     ImagePreprocessor,
     VisionServiceError,
     extract_label_with_timeout_sync,
@@ -54,14 +53,13 @@ class Fixture:
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Run the Phase 6 single-label benchmark. This harness uses Gemini "
-            "or the local fake provider only; it does not exercise paid vision models."
+            "Run the Phase 6 single-label benchmark with OpenAI or the local "
+            "fake provider."
         )
     )
     parser.add_argument("--fixture-dir", type=Path, default=Path("/tmp/ttb-phase6-fixtures"))
     parser.add_argument("--runs", type=int, default=3)
     parser.add_argument("--mock", action="store_true", help="Use FakeVisionService.")
-    parser.add_argument("--model", default=DEFAULT_GEMINI_MODEL)
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_SECONDS)
     parser.add_argument("--max-edge", type=int, default=DEFAULT_MAX_IMAGE_EDGE)
     parser.add_argument("--jpeg-quality", type=int, default=85)
@@ -79,8 +77,7 @@ def main() -> int:
     service = (
         FakeVisionService()
         if args.mock
-        else GeminiVisionService(
-            model=args.model,
+        else OpenAIVisionService(
             timeout_seconds=args.timeout,
             preprocessor=preprocessor,
         )
@@ -97,8 +94,8 @@ def main() -> int:
                     service=service,
                     preprocessor=preprocessor,
                     config={
-                        "provider": "fake" if args.mock else "gemini",
-                        "model": "fake" if args.mock else args.model,
+                        "provider": "fake" if args.mock else "openai",
+                        "model": "fake" if args.mock else service.model,
                         "timeout_seconds": args.timeout,
                         "max_edge": args.max_edge,
                         "jpeg_quality": args.jpeg_quality,

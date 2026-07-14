@@ -1,10 +1,9 @@
 from app.vision.service import (
-    DEFAULT_GEMINI_MODEL,
     DEFAULT_MAX_IMAGE_EDGE,
     DEFAULT_TIMEOUT_SECONDS,
     FakeVisionService,
-    GeminiClientProtocol,
-    GeminiVisionService,
+    OpenAIClientProtocol,
+    OpenAIVisionService,
     ImagePreprocessor,
     ProcessedImage,
     VisionAPIError,
@@ -19,11 +18,10 @@ from app.vision.service import (
 
 __all__ = [
     "DEFAULT_TIMEOUT_SECONDS",
-    "DEFAULT_GEMINI_MODEL",
     "DEFAULT_MAX_IMAGE_EDGE",
     "FakeVisionService",
-    "GeminiClientProtocol",
-    "GeminiVisionService",
+    "OpenAIClientProtocol",
+    "OpenAIVisionService",
     "ImagePreprocessor",
     "ProcessedImage",
     "VisionAPIError",

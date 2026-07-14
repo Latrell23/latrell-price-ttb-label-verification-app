@@ -1,12 +1,14 @@
 import asyncio
 
+import pytest
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.main import create_app
 
 
 def test_health_returns_readiness_payload(monkeypatch) -> None:
-    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_MODEL", "test-model")
     app = create_app()
     route = next(route for route in app.routes if route.path == "/health")
 
@@ -19,14 +21,27 @@ def test_health_returns_readiness_payload(monkeypatch) -> None:
 
 
 def test_health_reports_unconfigured_vision(monkeypatch) -> None:
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_MODEL", raising=False)
     app = create_app()
     route = next(route for route in app.routes if route.path == "/health")
 
     body = asyncio.run(route.endpoint())
 
     assert body["status"] == "healthy"
+    assert body["vision_configured"] is False
+
+
+@pytest.mark.parametrize("missing_variable", ["OPENAI_API_KEY", "OPENAI_MODEL"])
+def test_health_requires_key_and_model(monkeypatch, missing_variable) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_MODEL", "test-model")
+    monkeypatch.delenv(missing_variable, raising=False)
+    app = create_app()
+    route = next(route for route in app.routes if route.path == "/health")
+
+    body = asyncio.run(route.endpoint())
+
     assert body["vision_configured"] is False
 
 
