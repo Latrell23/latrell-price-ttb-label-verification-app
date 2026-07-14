@@ -56,7 +56,7 @@ class OpenAIVisionService:
                                 "image_url": (
                                     f"data:{processed.content_type};base64,{encoded_image}"
                                 ),
-                                "detail": "high",
+                                "detail": "low",
                             },
                         ],
                     }

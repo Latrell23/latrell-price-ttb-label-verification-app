@@ -11,6 +11,7 @@ import pytest
 
 from app.verification.models import ExtractedLabel
 from app.vision import (
+    DEFAULT_JPEG_QUALITY,
     DEFAULT_TIMEOUT_SECONDS,
     FakeVisionService,
     ImagePreprocessor,
@@ -126,7 +127,7 @@ def test_openai_request_uses_env_model_schema_and_base64_image(
     content = call["input"][0]["content"]
     assert content[0]["text"].startswith("Extract visible TTB alcohol label fields")
     assert content[1]["type"] == "input_image"
-    assert content[1]["detail"] == "high"
+    assert content[1]["detail"] == "low"
     prefix, encoded = content[1]["image_url"].split(",", 1)
     assert prefix == "data:image/jpeg;base64"
     assert base64.b64decode(encoded).startswith(b"\xff\xd8")
@@ -324,8 +325,9 @@ def test_preprocessor_accepts_heic_uploads() -> None:
 def test_preprocessor_default_max_edge_is_latency_optimized() -> None:
     processed = ImagePreprocessor().process(image_bytes((3200, 2400)))
 
-    assert processed.width == 1600
-    assert processed.height == 1200
+    assert DEFAULT_JPEG_QUALITY == 78
+    assert processed.width == 1024
+    assert processed.height == 768
 
 
 def test_invalid_image_bytes_raise_validation_error_without_api_call() -> None:
