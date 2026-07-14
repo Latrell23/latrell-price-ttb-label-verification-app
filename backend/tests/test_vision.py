@@ -121,7 +121,7 @@ def test_openai_request_uses_env_model_schema_and_base64_image(
 
     call = client.responses.calls[0]
     assert call["model"] == "vision-test-model"
-    assert DEFAULT_TIMEOUT_SECONDS == 4.5
+    assert DEFAULT_TIMEOUT_SECONDS == 4.9
     assert call["text_format"] is ExtractedLabel
     assert call["store"] is False
     content = call["input"][0]["content"]
