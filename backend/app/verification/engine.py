@@ -213,7 +213,7 @@ def _compare_net_contents(expected: str, found: str | None) -> FieldResult:
 
 
 def _compare_government_warning(expected: str, found: str | None) -> FieldResult:
-    """Compare the government warning exactly after whitespace collapse."""
+    """Compare the government warning exactly, ignoring OCR casing noise."""
     status = (
         "PASS"
         if found is not None
@@ -222,7 +222,7 @@ def _compare_government_warning(expected: str, found: str | None) -> FieldResult
     )
     return FieldResult(
         field="government_warning",
-        match_type="EXACT_CASE_SENSITIVE",
+        match_type="EXACT_CASE_INSENSITIVE",
         expected=expected,
         found=found,
         status=status,
@@ -230,8 +230,8 @@ def _compare_government_warning(expected: str, found: str | None) -> FieldResult
 
 
 def _normalize_government_warning(value: str) -> str:
-    """Collapse whitespace without changing case or punctuation."""
-    return re.sub(r"\s+", " ", value).strip()
+    """Collapse whitespace and case-fold without changing punctuation."""
+    return re.sub(r"\s+", " ", value).strip().casefold()
 
 
 def _normalize_text(value: str) -> str:

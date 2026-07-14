@@ -351,7 +351,7 @@ def test_exact_government_warning_passes() -> None:
     assert result_for_field(result, "government_warning").status == "PASS"
 
 
-def test_government_warning_title_case_fails_strict_case_sensitive_comparison() -> None:
+def test_government_warning_title_case_passes_case_insensitive_comparison() -> None:
     title_case_warning = WARNING.title()
 
     result = verify_label(
@@ -360,18 +360,31 @@ def test_government_warning_title_case_fails_strict_case_sensitive_comparison() 
     )
 
     warning = result_for_field(result, "government_warning")
-    assert warning.status == "FAIL"
+    assert warning.status == "PASS"
     assert warning.expected == WARNING
     assert warning.found == title_case_warning
 
 
-def test_government_warning_case_difference_fails() -> None:
+def test_government_warning_case_difference_passes() -> None:
     result = verify_label(
         application(government_warning=WARNING),
         extracted(government_warning=WARNING.lower()),
     )
 
-    assert result_for_field(result, "government_warning").status == "FAIL"
+    assert result_for_field(result, "government_warning").status == "PASS"
+
+
+def test_government_warning_mixed_case_ocr_noise_passes() -> None:
+    mixed_case_warning = WARNING.replace("DEFECTS", "DEFects", 1)
+
+    result = verify_label(
+        application(government_warning=WARNING),
+        extracted(government_warning=mixed_case_warning),
+    )
+
+    warning = result_for_field(result, "government_warning")
+    assert warning.status == "PASS"
+    assert warning.match_type == "EXACT_CASE_INSENSITIVE"
 
 
 def test_government_warning_missing_colon_fails() -> None:

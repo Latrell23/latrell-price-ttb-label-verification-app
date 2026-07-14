@@ -12,6 +12,7 @@ MatchType = Literal[
     "NUMERIC_ABV",
     "UNIT_NORMALIZED",
     "EXACT_CASE_SENSITIVE",
+    "EXACT_CASE_INSENSITIVE",
 ]
 
 
