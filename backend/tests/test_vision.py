@@ -39,21 +39,37 @@ def configured_openai_model(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 class FakeOpenAIResponses:
-    def __init__(self, response: Any | None = None, exception: Exception | None = None):
+    def __init__(
+        self,
+        response: Any | None = None,
+        exception: Exception | None = None,
+        side_effects: list[Any] | None = None,
+    ):
         self.response = response
         self.exception = exception
+        self.side_effects = side_effects or []
         self.calls: list[dict[str, Any]] = []
 
     def parse(self, **kwargs: Any) -> Any:
         self.calls.append(kwargs)
+        if self.side_effects:
+            effect = self.side_effects.pop(0)
+            if isinstance(effect, Exception):
+                raise effect
+            return effect
         if self.exception is not None:
             raise self.exception
         return self.response
 
 
 class FakeOpenAIClient:
-    def __init__(self, response: Any | None = None, exception: Exception | None = None):
-        self.responses = FakeOpenAIResponses(response, exception)
+    def __init__(
+        self,
+        response: Any | None = None,
+        exception: Exception | None = None,
+        side_effects: list[Any] | None = None,
+    ):
+        self.responses = FakeOpenAIResponses(response, exception, side_effects)
 
 
 def label(**overrides: Any) -> ExtractedLabel:
@@ -172,6 +188,39 @@ def test_openai_sdk_exception_translates_to_api_error() -> None:
 
     with pytest.raises(VisionAPIError):
         service.extract_label(image_bytes())
+
+
+def test_openai_retryable_error_retries_once_within_timeout_budget() -> None:
+    class APIError(Exception):
+        pass
+
+    expected = label()
+    client = FakeOpenAIClient(
+        side_effects=[
+            APIError("temporary"),
+            openai_response(parsed=expected),
+        ]
+    )
+    service = OpenAIVisionService(client=client, model="test-model")
+
+    actual = service.extract_label(image_bytes())
+
+    assert actual == expected
+    assert len(client.responses.calls) == 2
+    assert client.responses.calls[0]["timeout"] < DEFAULT_TIMEOUT_SECONDS
+    assert 0 < client.responses.calls[1]["timeout"] <= DEFAULT_TIMEOUT_SECONDS
+
+
+def test_openai_non_retryable_error_does_not_retry() -> None:
+    service = OpenAIVisionService(
+        client=FakeOpenAIClient(exception=RuntimeError("quota")),
+        model="test-model",
+    )
+
+    with pytest.raises(VisionAPIError):
+        service.extract_label(image_bytes())
+
+    assert len(service.client.responses.calls) == 1
 
 
 def test_openai_missing_key_raises_configuration_error(
