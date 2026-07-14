@@ -82,6 +82,19 @@ def image_bytes(size: tuple[int, int] = (320, 240), mode: str = "RGB") -> bytes:
     return output.getvalue()
 
 
+def heic_image_bytes(size: tuple[int, int] = (320, 240)) -> bytes:
+    from PIL import Image, ImageDraw
+    from pillow_heif import register_heif_opener
+
+    register_heif_opener()
+    image = Image.new("RGB", size, "white")
+    draw = ImageDraw.Draw(image)
+    draw.text((12, 12), "ACME ESTATE\nRED WINE\nALC. 13.5% BY VOL.", fill="black")
+    output = BytesIO()
+    image.save(output, format="HEIF")
+    return output.getvalue()
+
+
 def openai_response(parsed: Any | None = None) -> SimpleNamespace:
     return SimpleNamespace(output_parsed=parsed)
 
@@ -294,6 +307,18 @@ def test_preprocessor_does_not_upscale_small_images() -> None:
 
     assert processed.width == 300
     assert processed.height == 200
+
+
+def test_preprocessor_accepts_heic_uploads() -> None:
+    processed = ImagePreprocessor(max_long_edge=2048).process(
+        heic_image_bytes((300, 200)),
+        "image/heic",
+    )
+
+    assert processed.content_type == "image/jpeg"
+    assert processed.width == 300
+    assert processed.height == 200
+    assert processed.data[:2] == b"\xff\xd8"
 
 
 def test_preprocessor_default_max_edge_is_latency_optimized() -> None:

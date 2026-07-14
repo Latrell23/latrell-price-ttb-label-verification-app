@@ -6,7 +6,7 @@ from app.verification import ApplicationData
 
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
-SUPPORTED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+SUPPORTED_IMAGE_TYPE_PREFIX = "image/"
 
 
 def validate_application_fields(
@@ -63,11 +63,11 @@ async def read_validated_image(
         )
 
     # Reject unsupported media types before reading the file body.
-    if image.content_type not in SUPPORTED_IMAGE_TYPES:
+    if not (image.content_type or "").startswith(SUPPORTED_IMAGE_TYPE_PREFIX):
         return None, error_response(
             415,
             "unsupported_media_type",
-            "The uploaded file must be a JPEG, PNG, or WebP image.",
+            "The uploaded file must be an image.",
             [
                 {
                     "field": "image",

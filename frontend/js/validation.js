@@ -1,4 +1,4 @@
-import { FIELDS, MAX_UPLOAD_BYTES, SUPPORTED_IMAGE_TYPES } from "./constants.js";
+import { FIELDS, MAX_UPLOAD_BYTES, SUPPORTED_IMAGE_TYPE_PREFIX } from "./constants.js";
 import { fieldElement } from "./dom.js";
 
 const ABV_MESSAGE = "Enter ABV as a percent or proof, such as 13.5% or 27 proof.";
@@ -12,8 +12,8 @@ export function validateImageFile(file) {
   if (!file) {
     return "Choose one label image.";
   }
-  if (!SUPPORTED_IMAGE_TYPES.has(file.type)) {
-    return "Please choose a JPG, PNG, or WebP image.";
+  if (!file.type.startsWith(SUPPORTED_IMAGE_TYPE_PREFIX)) {
+    return "Please choose an image file.";
   }
   if (file.size === 0) {
     return "The selected file is empty.";

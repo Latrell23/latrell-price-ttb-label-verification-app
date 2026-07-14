@@ -413,6 +413,19 @@ def test_verify_unsupported_content_type_returns_415() -> None:
     assert_no_internal_details(response)
 
 
+def test_verify_accepts_image_content_types_matching_picker_allowlist() -> None:
+    service = SpyVisionService()
+
+    response = call_verify(
+        service,
+        image=upload_file(content=IMAGE_BYTES, content_type="image/heic"),
+    )
+
+    status_code, _ = response_status_and_body(response)
+    assert status_code == 200
+    assert service.calls == [(IMAGE_BYTES, "image/heic")]
+
+
 def test_verify_unsupported_content_type_does_not_construct_vision_service() -> None:
     def unavailable_service() -> SpyVisionService:
         raise VisionConfigurationError("missing api key")

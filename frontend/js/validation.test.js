@@ -3,7 +3,16 @@ import test from "node:test";
 
 globalThis.window = { APP_CONFIG: {} };
 
-const { validateAbv, validateNetContents } = await import("./validation.js");
+const { validateAbv, validateImageFile, validateNetContents } = await import("./validation.js");
+
+test("validateImageFile accepts image MIME types matching the picker", () => {
+  assert.equal(validateImageFile({ type: "image/gif", size: 1024 }), "");
+  assert.equal(validateImageFile({ type: "image/heic", size: 1024 }), "");
+});
+
+test("validateImageFile rejects non-image MIME types", () => {
+  assert.match(validateImageFile({ type: "application/pdf", size: 1024 }), /image file/);
+});
 
 test("validateAbv accepts percent and proof values", () => {
   ["13.5", "13.5%", "13.5% ABV", "13.5 percent", "27 proof", "80 proof"].forEach(

@@ -5,6 +5,15 @@ from app.vision.constants import DEFAULT_JPEG_QUALITY, DEFAULT_MAX_IMAGE_EDGE
 from app.vision.errors import VisionConfigurationError, VisionImageValidationError
 
 
+HEIF_IMAGE_TYPES = {
+    "image/heic",
+    "image/heif",
+    "image/heic-sequence",
+    "image/heif-sequence",
+}
+_HEIF_OPENER_REGISTERED = False
+
+
 @dataclass(frozen=True)
 class ProcessedImage:
     """JPEG-normalized image bytes and dimensions ready for model input."""
@@ -38,6 +47,9 @@ class ImagePreprocessor:
                 "Pillow is required for image preprocessing"
             ) from exc
 
+        if (content_type or "").lower() in HEIF_IMAGE_TYPES:
+            _register_heif_opener()
+
         try:
             with Image.open(BytesIO(image_bytes)) as image:
                 # Load and normalize orientation before resizing.
@@ -70,3 +82,20 @@ class ImagePreprocessor:
             raise VisionImageValidationError("Invalid image bytes") from exc
         except OSError as exc:
             raise VisionImageValidationError("Invalid image bytes") from exc
+
+
+def _register_heif_opener() -> None:
+    """Register HEIC/HEIF support with Pillow before opening those uploads."""
+    global _HEIF_OPENER_REGISTERED
+    if _HEIF_OPENER_REGISTERED:
+        return
+
+    try:
+        from pillow_heif import register_heif_opener
+    except ImportError as exc:  # pragma: no cover - dependency guard
+        raise VisionConfigurationError(
+            "pillow-heif is required for HEIC image preprocessing"
+        ) from exc
+
+    register_heif_opener()
+    _HEIF_OPENER_REGISTERED = True
