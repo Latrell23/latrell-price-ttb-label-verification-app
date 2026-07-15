@@ -1,4 +1,5 @@
 import os
+from contextlib import asynccontextmanager
 from time import perf_counter
 
 from fastapi import FastAPI
@@ -6,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.routes.health import router as health_router
 from app.routes.verify import router as verify_router
+from app.vision.dependencies import close_vision_service
 
 
 DEFAULT_LOCAL_ALLOWED_ORIGINS = (
@@ -34,9 +36,18 @@ def _allowed_origins(value: str | None, app_env: str | None) -> list[str]:
     return origins
 
 
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Release process-scoped clients when the application shuts down."""
+    try:
+        yield
+    finally:
+        close_vision_service()
+
+
 def create_app() -> FastAPI:
     """Create and configure the TTB label verification API."""
-    app = FastAPI(title="TTB Label Verification API")
+    app = FastAPI(title="TTB Label Verification API", lifespan=lifespan)
 
     # Configure browser access for the static frontend.
     allowed_origins = _allowed_origins(os.getenv("ALLOWED_ORIGINS"), os.getenv("APP_ENV"))

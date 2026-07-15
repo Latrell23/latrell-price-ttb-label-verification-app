@@ -9,7 +9,7 @@ export const API_BASE_URL = (config.API_BASE_URL || "http://localhost:8000").rep
 export const FRONTEND_TIMEOUT_MS = 5000;
 export const MAX_BATCH_ROWS = positiveInteger(config.MAX_BATCH_ROWS, 5);
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
-export const SUPPORTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+export const SUPPORTED_IMAGE_TYPE_PREFIX = "image/";
 
 export const FIELDS = [
   { name: "brand_name", label: "Brand Name", type: "input" },
@@ -32,7 +32,7 @@ export const ERROR_MESSAGES = {
   missing_upload_fields: "Choose an image for each label.",
   missing_required_fields: "Complete the highlighted fields.",
   blank_required_fields: "Complete the highlighted fields.",
-  unsupported_media_type: "Please choose a JPG, PNG, or WebP image.",
+  unsupported_media_type: "Please choose an image file.",
   file_too_large: "Please choose an image that is 10 MB or smaller.",
   empty_file: "The selected file could not be read as an image.",
   invalid_image: "The selected file could not be read as an image.",

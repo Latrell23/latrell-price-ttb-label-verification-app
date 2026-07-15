@@ -271,10 +271,18 @@ export OPENAI_REASONING_EFFORT=minimal
 backend/.venv/bin/python backend/scripts/benchmark_phase6.py --runs 30 --jsonl /tmp/ttb-phase6-openai.jsonl
 ```
 
+Run the deployed endpoint benchmark after one warmup request. It records JSON
+error codes and response content types so application 502s can be distinguished
+from hosting proxy failures:
+
+```bash
+backend/.venv/bin/python scripts/live_verify_benchmark.py --runs 30 --warmups 1
+```
+
 Tune image settings without changing application code:
 
 ```bash
-backend/.venv/bin/python backend/scripts/benchmark_phase6.py --runs 30 --max-edge 1600 --jpeg-quality 78 --jsonl /tmp/ttb-phase6-1600-q78.jsonl
+backend/.venv/bin/python backend/scripts/benchmark_phase6.py --runs 30 --max-edge 1152 --jpeg-quality 80 --jsonl /tmp/ttb-phase6-1152-q80.jsonl
 ```
 
 Benchmark targets are for warm backend requests and exclude Render free-plan
@@ -294,8 +302,22 @@ Measured deployed performance:
 
 | Date | Command | Sample | p50 | p95 | Result |
 | --- | --- | --- | --- | --- | --- |
+| 2026-07-14 | `backend/.venv/bin/python scripts/live_verify_benchmark.py --runs 30 --warmups 1 --timeout 15` | committed JPEG fixture | 2368 ms | 3289 ms | Deadline-aware retry run succeeded on 29 of 30 requests; all 29 successful responses returned `APPROVED`. The single failure was an application JSON HTTP 502 with `vision_extraction_failed`, not a Render proxy response. Wall-clock p50 was 2571 ms and p95 was 3461 ms. |
+| 2026-07-14 | Immediate rerun of 30-request live `/verify` benchmark on `gpt-5.4-nano` with `OPENAI_REASONING_EFFORT=none` | committed JPEG fixture | 2472 ms | 3190 ms | Successful responses stayed accurate and fast: 27 of 30 requests succeeded and all successful responses returned `APPROVED`; 3 requests returned HTTP 502, showing provider reliability variance. |
+| 2026-07-14 | 30-run live `/verify` benchmark after switching to `gpt-5.4-nano` with `OPENAI_REASONING_EFFORT=none` | committed JPEG fixture | 2428 ms | 2727 ms | Best accuracy/latency result so far: 29 of 30 requests succeeded and all 29 successful responses returned `APPROVED`; 1 request still returned HTTP 502. |
+| 2026-07-14 | Immediate warm rerun of 30-request live `/verify` benchmark after bounded retry redeploy | committed JPEG fixture | 2408 ms | 3333 ms | Warm successful responses met latency targets and reliability improved to 29 of 30 successful requests; 1 late request still returned HTTP 502. |
+| 2026-07-14 | 30-run live `/verify` benchmark against `https://latrell-price-ttb-label-verification-app.onrender.com` after 1 warmup request, after bounded retry redeploy | committed JPEG fixture | 2480 ms | 3049 ms | Successful responses were faster, but reliability remained 28 of 30 successful requests; 2 requests still returned HTTP 502. |
+| 2026-07-14 | 30-run live `/verify` benchmark against `https://latrell-price-ttb-label-verification-app.onrender.com` after 1 warmup request, after 4.9s timeout redeploy | committed JPEG fixture | 2369 ms | 3813 ms | Successful responses met warm latency targets, but reliability was 28 of 30 successful requests; 2 requests still returned HTTP 502 near the endpoint timeout. |
+| 2026-07-14 | 30-run live `/verify` benchmark against `https://latrell-price-ttb-label-verification-app.onrender.com` after 1 warmup request, after 1024px/quality-78/low-detail redeploy | committed JPEG fixture | 2917 ms | 4049 ms | Successful responses met warm latency targets, and reliability improved to 29 of 30 successful requests; 1 request still returned HTTP 502 near the app timeout. |
+| 2026-07-14 | 30-run live `/verify` benchmark against `https://latrell-price-ttb-label-verification-app.onrender.com` after 1 warmup request, before image optimization redeploy | committed JPEG fixture | 2577 ms | 3477 ms | Successful responses met warm latency targets, but 2 of 30 requests returned HTTP 502 near the app timeout; reliability still needed follow-up before claiming full pass. |
+| 2026-07-14 | `backend/.venv/bin/python scripts/live_checklist.py --base-url https://latrell-price-ttb-label-verification-app.onrender.com` | committed JPEG fixture | Not available | Not available | Failed on `POST /verify` with HTTP 502, matching the intermittent live provider failures seen in the 30-run benchmark. |
+| 2026-07-14 | `backend/.venv/bin/python backend/scripts/benchmark_phase6.py --mock --runs 3 --jsonl /tmp/ttb-phase6-mock.jsonl` | generated benchmark fixtures | 37 ms | 1041 ms | Deterministic fake provider harness passed with 18 successful fixture runs and 3 expected invalid-image failures; preprocessing p95 was 1040 ms on generated large fixtures, so preprocessing still needs tuning separately. |
 | 2026-07-12 | `python scripts/live_checklist.py --base-url https://latrell-price-ttb-label-verification-app.onrender.com` | committed JPEG fixture | Not available | Not available | Real provider timed out at the 4.5s app-layer budget; no successful deployed p50/p95 can be claimed from that run. |
 | 2026-07-12 | `backend/scripts/benchmark_phase6.py --mock --runs 3` | deterministic fake provider | Not applicable | Not applicable | Backend/test harness passed; this validates API shape and comparison behavior, not live provider latency. |
+
+The latest 2026-07-14 live benchmark reports API `latency_ms` percentiles for
+the 29 successful responses. Wall-clock latency over the network was p50 2571
+ms, p95 3461 ms, and max 3926 ms.
 
 Cold-start behavior: Render free-tier services may take longer than the 5s
 warm-request target after idle spin-down. The latency SLA is evaluated on warm
@@ -368,7 +390,7 @@ window.APP_CONFIG = {
 | Tradeoff | Reason |
 | --- | --- |
 | Batch cap defaults to `5` | Keeps memory and concurrent provider calls bounded on free-tier hosting. |
-| Backend and SDK timeouts are both enforced | The OpenAI client uses the 4.5s deadline with retries disabled, while the app-layer guard preserves the endpoint budget. |
+| Backend and SDK timeouts are both enforced | One 4.6s backend deadline covers preprocessing and extraction, with 150ms reserved for response completion. SDK retries are disabled; the app retries one fast connection or provider 5xx failure only when at least 2.25s remain. |
 | OpenAI is the only production provider | Keeps deployment simple while requiring the model choice to be explicit in the environment. |
 | Static frontend config is committed | Vercel static hosting has no runtime server env; public backend URL and row cap are safe client config. |
 | No authentication or persistence | The proof of concept focuses on demonstrable label verification behavior. |

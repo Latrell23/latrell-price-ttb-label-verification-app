@@ -1,4 +1,4 @@
-from typing import Any, Protocol
+from typing import Protocol
 
 from app.verification.models import ExtractedLabel
 
@@ -7,7 +7,11 @@ class VisionService(Protocol):
     """Protocol for services that extract structured label fields from images."""
 
     def extract_label(
-        self, image_bytes: bytes, content_type: str | None = None
+        self,
+        image_bytes: bytes,
+        content_type: str | None = None,
+        *,
+        deadline: float | None = None,
     ) -> ExtractedLabel:
         """Extract structured label fields from image bytes."""
 
@@ -15,7 +19,7 @@ class VisionService(Protocol):
 class OpenAIResponsesProtocol(Protocol):
     """Protocol for the OpenAI Responses client used by this service."""
 
-    def parse(self, **kwargs: Any) -> Any:
+    def parse(self, **kwargs: object) -> object:
         """Create and parse an OpenAI response from a structured request."""
 
 

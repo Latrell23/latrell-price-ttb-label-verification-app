@@ -1,4 +1,5 @@
 from app.vision.service import (
+    DEFAULT_JPEG_QUALITY,
     DEFAULT_MAX_IMAGE_EDGE,
     DEFAULT_TIMEOUT_SECONDS,
     FakeVisionService,
@@ -19,6 +20,7 @@ from app.vision.service import (
 __all__ = [
     "DEFAULT_TIMEOUT_SECONDS",
     "DEFAULT_MAX_IMAGE_EDGE",
+    "DEFAULT_JPEG_QUALITY",
     "FakeVisionService",
     "OpenAIClientProtocol",
     "OpenAIVisionService",

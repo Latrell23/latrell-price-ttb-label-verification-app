@@ -54,7 +54,11 @@ class SpyVisionService:
         self.calls: list[tuple[bytes, str | None]] = []
 
     def extract_label(
-        self, image_bytes: bytes, content_type: str | None = None
+        self,
+        image_bytes: bytes,
+        content_type: str | None = None,
+        *,
+        deadline: float | None = None,
     ) -> ExtractedLabel:
         self.calls.append((image_bytes, content_type))
         if self.exception_factory is not None:
@@ -74,7 +78,11 @@ class SequenceVisionService:
         self._lock = Lock()
 
     def extract_label(
-        self, image_bytes: bytes, content_type: str | None = None
+        self,
+        image_bytes: bytes,
+        content_type: str | None = None,
+        *,
+        deadline: float | None = None,
     ) -> ExtractedLabel:
         if self.delay_seconds:
             time.sleep(self.delay_seconds)
@@ -413,6 +421,19 @@ def test_verify_unsupported_content_type_returns_415() -> None:
     assert_no_internal_details(response)
 
 
+def test_verify_accepts_image_content_types_matching_picker_allowlist() -> None:
+    service = SpyVisionService()
+
+    response = call_verify(
+        service,
+        image=upload_file(content=IMAGE_BYTES, content_type="image/heic"),
+    )
+
+    status_code, _ = response_status_and_body(response)
+    assert status_code == 200
+    assert service.calls == [(IMAGE_BYTES, "image/heic")]
+
+
 def test_verify_unsupported_content_type_does_not_construct_vision_service() -> None:
     def unavailable_service() -> SpyVisionService:
         raise VisionConfigurationError("missing api key")
@@ -486,12 +507,16 @@ def test_verify_vision_api_error_returns_502() -> None:
 def test_verify_backend_timeout_returns_502(monkeypatch) -> None:
     class SlowVisionService:
         def extract_label(
-            self, image_bytes: bytes, content_type: str | None = None
+            self,
+            image_bytes: bytes,
+            content_type: str | None = None,
+            *,
+            deadline: float | None = None,
         ) -> ExtractedLabel:
             time.sleep(0.1)
             return extracted_label()
 
-    monkeypatch.setattr("app.vision.extraction.DEFAULT_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr("app.api.verify_controller.DEFAULT_TIMEOUT_SECONDS", 0.01)
 
     response = call_verify(SlowVisionService())
 
