@@ -54,12 +54,36 @@ def post_verify(
     image_bytes: bytes,
 ) -> dict[str, Any]:
     started_at = time.perf_counter()
-    response = client.post(
-        f"{base_url}/verify",
-        data=APPLICATION_DATA,
-        files={"image": (image_path.name, image_bytes, "image/jpeg")},
-        headers={"Accept": "application/json"},
-    )
+    try:
+        response = client.post(
+            f"{base_url}/verify",
+            data=APPLICATION_DATA,
+            files={"image": (image_path.name, image_bytes, "image/jpeg")},
+            headers={"Accept": "application/json"},
+        )
+    except httpx.TimeoutException as exc:
+        return {
+            "status_code": "client_timeout",
+            "content_type": None,
+            "body_kind": "exception",
+            "error_code": type(exc).__name__,
+            "body_preview": str(exc),
+            "wall_ms": (time.perf_counter() - started_at) * 1000,
+            "latency_ms": None,
+            "overall_verdict": None,
+        }
+    except httpx.HTTPError as exc:
+        return {
+            "status_code": "client_error",
+            "content_type": None,
+            "body_kind": "exception",
+            "error_code": type(exc).__name__,
+            "body_preview": str(exc),
+            "wall_ms": (time.perf_counter() - started_at) * 1000,
+            "latency_ms": None,
+            "overall_verdict": None,
+        }
+
     wall_ms = (time.perf_counter() - started_at) * 1000
     content_type = response.headers.get("content-type", "")
 

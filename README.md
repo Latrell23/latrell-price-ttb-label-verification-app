@@ -302,6 +302,7 @@ Measured deployed performance:
 
 | Date | Command | Sample | p50 | p95 | Result |
 | --- | --- | --- | --- | --- | --- |
+| 2026-07-14 | `backend/.venv/bin/python scripts/live_verify_benchmark.py --runs 30 --warmups 1 --timeout 15` | committed JPEG fixture | 2368 ms | 3289 ms | Deadline-aware retry run succeeded on 29 of 30 requests; all 29 successful responses returned `APPROVED`. The single failure was an application JSON HTTP 502 with `vision_extraction_failed`, not a Render proxy response. Wall-clock p50 was 2571 ms and p95 was 3461 ms. |
 | 2026-07-14 | Immediate rerun of 30-request live `/verify` benchmark on `gpt-5.4-nano` with `OPENAI_REASONING_EFFORT=none` | committed JPEG fixture | 2472 ms | 3190 ms | Successful responses stayed accurate and fast: 27 of 30 requests succeeded and all successful responses returned `APPROVED`; 3 requests returned HTTP 502, showing provider reliability variance. |
 | 2026-07-14 | 30-run live `/verify` benchmark after switching to `gpt-5.4-nano` with `OPENAI_REASONING_EFFORT=none` | committed JPEG fixture | 2428 ms | 2727 ms | Best accuracy/latency result so far: 29 of 30 requests succeeded and all 29 successful responses returned `APPROVED`; 1 request still returned HTTP 502. |
 | 2026-07-14 | Immediate warm rerun of 30-request live `/verify` benchmark after bounded retry redeploy | committed JPEG fixture | 2408 ms | 3333 ms | Warm successful responses met latency targets and reliability improved to 29 of 30 successful requests; 1 late request still returned HTTP 502. |
@@ -315,8 +316,8 @@ Measured deployed performance:
 | 2026-07-12 | `backend/scripts/benchmark_phase6.py --mock --runs 3` | deterministic fake provider | Not applicable | Not applicable | Backend/test harness passed; this validates API shape and comparison behavior, not live provider latency. |
 
 The latest 2026-07-14 live benchmark reports API `latency_ms` percentiles for
-the 27 successful responses. Wall-clock latency over the network was p50 2716
-ms, p95 3345 ms, and max 3683 ms.
+the 29 successful responses. Wall-clock latency over the network was p50 2571
+ms, p95 3461 ms, and max 3926 ms.
 
 Cold-start behavior: Render free-tier services may take longer than the 5s
 warm-request target after idle spin-down. The latency SLA is evaluated on warm
