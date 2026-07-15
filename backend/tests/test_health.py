@@ -71,3 +71,22 @@ def test_cors_does_not_hardcode_deployed_frontend_in_production(monkeypatch) -> 
     assert "https://ttb-label-frontend.vercel.app" not in cors_middleware.kwargs[
         "allow_origins"
     ]
+
+
+def test_app_lifespan_closes_shared_vision_service(monkeypatch) -> None:
+    closed = False
+
+    def close_service() -> None:
+        nonlocal closed
+        closed = True
+
+    monkeypatch.setattr("app.main.close_vision_service", close_service)
+    app = create_app()
+
+    async def run_lifespan() -> None:
+        async with app.router.lifespan_context(app):
+            assert closed is False
+
+    asyncio.run(run_lifespan())
+
+    assert closed is True

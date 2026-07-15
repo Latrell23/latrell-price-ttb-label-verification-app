@@ -54,6 +54,8 @@ class FakeOpenAIResponses:
         self.calls.append(kwargs)
         if self.side_effects:
             effect = self.side_effects.pop(0)
+            if callable(effect):
+                effect = effect()
             if isinstance(effect, Exception):
                 raise effect
             return effect
@@ -70,6 +72,10 @@ class FakeOpenAIClient:
         side_effects: list[Any] | None = None,
     ):
         self.responses = FakeOpenAIResponses(response, exception, side_effects)
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
 
 
 def label(**overrides: Any) -> ExtractedLabel:
@@ -137,7 +143,7 @@ def test_openai_request_uses_env_model_schema_and_base64_image(
 
     call = client.responses.calls[0]
     assert call["model"] == "vision-test-model"
-    assert DEFAULT_TIMEOUT_SECONDS == 4.9
+    assert DEFAULT_TIMEOUT_SECONDS == 4.6
     assert call["text_format"] is ExtractedLabel
     assert call["store"] is False
     content = call["input"][0]["content"]
@@ -191,13 +197,13 @@ def test_openai_sdk_exception_translates_to_api_error() -> None:
 
 
 def test_openai_retryable_error_retries_once_within_timeout_budget() -> None:
-    class APIError(Exception):
+    class APIConnectionError(Exception):
         pass
 
     expected = label()
     client = FakeOpenAIClient(
         side_effects=[
-            APIError("temporary"),
+            APIConnectionError("temporary"),
             openai_response(parsed=expected),
         ]
     )
@@ -207,8 +213,94 @@ def test_openai_retryable_error_retries_once_within_timeout_budget() -> None:
 
     assert actual == expected
     assert len(client.responses.calls) == 2
-    assert client.responses.calls[0]["timeout"] < DEFAULT_TIMEOUT_SECONDS
-    assert 0 < client.responses.calls[1]["timeout"] <= DEFAULT_TIMEOUT_SECONDS
+    assert 4.0 < client.responses.calls[0]["timeout"] < DEFAULT_TIMEOUT_SECONDS
+    assert 2.25 <= client.responses.calls[1]["timeout"] < DEFAULT_TIMEOUT_SECONDS
+
+
+def test_openai_retryable_5xx_retries_once() -> None:
+    class APIStatusError(Exception):
+        status_code = 503
+
+    expected = label()
+    client = FakeOpenAIClient(
+        side_effects=[
+            APIStatusError("temporary"),
+            openai_response(parsed=expected),
+        ]
+    )
+    service = OpenAIVisionService(client=client, model="test-model")
+
+    assert service.extract_label(image_bytes()) == expected
+    assert len(client.responses.calls) == 2
+
+
+@pytest.mark.parametrize(
+    ("exception_name", "status_code"),
+    [
+        ("TimeoutError", None),
+        ("APITimeoutError", None),
+        ("RateLimitError", 429),
+        ("BadRequestError", 400),
+    ],
+)
+def test_openai_timeout_and_4xx_errors_do_not_retry(
+    exception_name: str,
+    status_code: int | None,
+) -> None:
+    exception_type = type(exception_name, (Exception,), {})
+    exception = exception_type("do not retry")
+    if status_code is not None:
+        exception.status_code = status_code
+    client = FakeOpenAIClient(exception=exception)
+    service = OpenAIVisionService(client=client, model="test-model")
+
+    with pytest.raises(VisionAPIError):
+        service.extract_label(image_bytes())
+
+    assert len(client.responses.calls) == 1
+
+
+def test_openai_skips_retry_when_failure_leaves_too_little_time() -> None:
+    class APIStatusError(Exception):
+        status_code = 503
+
+    def slow_failure() -> Exception:
+        time.sleep(0.2)
+        return APIStatusError("late failure")
+
+    client = FakeOpenAIClient(
+        side_effects=[slow_failure, openai_response(parsed=label())]
+    )
+    service = OpenAIVisionService(client=client, model="test-model")
+
+    with pytest.raises(VisionAPIError):
+        service.extract_label(
+            image_bytes(),
+            deadline=time.monotonic() + 2.5,
+        )
+
+    assert len(client.responses.calls) == 1
+
+
+def test_preprocessing_reduces_provider_timeout() -> None:
+    class DelayedPreprocessor:
+        def process(self, data: bytes, content_type: str | None = None):
+            time.sleep(0.08)
+            return ImagePreprocessor().process(data, content_type)
+
+    client = FakeOpenAIClient(openai_response(parsed=label()))
+    service = OpenAIVisionService(
+        client=client,
+        model="test-model",
+        preprocessor=DelayedPreprocessor(),
+    )
+
+    service.extract_label(
+        image_bytes(),
+        deadline=time.monotonic() + 0.4,
+    )
+
+    assert 0.1 < client.responses.calls[0]["timeout"] < 0.25
 
 
 def test_openai_non_retryable_error_does_not_retry() -> None:
@@ -221,6 +313,34 @@ def test_openai_non_retryable_error_does_not_retry() -> None:
         service.extract_label(image_bytes())
 
     assert len(service.client.responses.calls) == 1
+
+
+def test_openai_service_closes_shared_client() -> None:
+    client = FakeOpenAIClient(openai_response(parsed=label()))
+    service = OpenAIVisionService(client=client, model="test-model")
+
+    service.close()
+
+    assert client.closed is True
+
+
+def test_production_vision_service_is_reused_and_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.vision import dependencies
+
+    client = FakeOpenAIClient(openai_response(parsed=label()))
+    service = OpenAIVisionService(client=client, model="test-model")
+    dependencies.get_vision_service.cache_clear()
+    monkeypatch.setattr(dependencies, "OpenAIVisionService", lambda: service)
+
+    assert dependencies.get_vision_service() is service
+    assert dependencies.get_vision_service() is service
+
+    dependencies.close_vision_service()
+
+    assert client.closed is True
+    assert dependencies.get_vision_service.cache_info().currsize == 0
 
 
 def test_openai_missing_key_raises_configuration_error(
@@ -454,18 +574,24 @@ def test_fake_vision_service_is_mockable_without_client() -> None:
 def test_sync_timeout_helper_raises_api_error_for_slow_extraction() -> None:
     class SlowVisionService:
         def extract_label(
-            self, image_bytes: bytes, content_type: str | None = None
+            self,
+            image_bytes: bytes,
+            content_type: str | None = None,
+            *,
+            deadline: float | None = None,
         ) -> ExtractedLabel:
             time.sleep(0.1)
             return label()
 
-    with pytest.raises(VisionAPIError):
+    with pytest.raises(VisionAPIError) as error:
         extract_label_with_timeout_sync(
             SlowVisionService(),
             image_bytes(),
             "image/png",
             timeout_seconds=0.01,
         )
+
+    assert error.value.reason == "endpoint_deadline"
 
 
 def test_sample_script_mock_mode_returns_populated_label(

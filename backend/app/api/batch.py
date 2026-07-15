@@ -2,6 +2,7 @@ import asyncio
 import concurrent.futures
 import json
 import os
+import time
 from collections.abc import AsyncIterator, Mapping
 from typing import Any, TypedDict
 
@@ -27,7 +28,11 @@ from app.verification import (
     BatchVerificationSummary,
     verify_label,
 )
-from app.vision import VisionService, extract_label_with_timeout
+from app.vision import (
+    DEFAULT_TIMEOUT_SECONDS,
+    VisionService,
+    extract_label_with_timeout,
+)
 
 
 DEFAULT_MAX_BATCH_ITEMS = 5
@@ -249,6 +254,7 @@ async def verify_batch_item(
     executor: concurrent.futures.ThreadPoolExecutor,
 ) -> BatchVerificationItem:
     """Validate and verify one batch item without affecting other items."""
+    deadline = time.monotonic() + DEFAULT_TIMEOUT_SECONDS
     application_data, field_error = validate_application_fields(
         {field: item.get(field) for field in APPLICATION_FIELD_NAMES}
     )
@@ -271,6 +277,7 @@ async def verify_batch_item(
         vision_service=vision_service,
         semaphore=semaphore,
         executor=executor,
+        deadline=deadline,
     )
 
 
@@ -284,8 +291,12 @@ async def verify_batch_item_data(
     vision_service: VisionService,
     semaphore: asyncio.Semaphore,
     executor: concurrent.futures.ThreadPoolExecutor,
+    deadline: float | None = None,
 ) -> BatchVerificationItem:
     """Validate and verify one batch item from already-read upload bytes."""
+    deadline = (
+        time.monotonic() + DEFAULT_TIMEOUT_SECONDS if deadline is None else deadline
+    )
     application_data, field_error = validate_application_fields(
         {field: item.get(field) for field in APPLICATION_FIELD_NAMES}
     )
@@ -320,6 +331,7 @@ async def verify_batch_item_data(
                 image_bytes,
                 content_type,
                 executor,
+                deadline=deadline,
             )
         result = verify_label(application_data, extracted_label).model_copy(
             update={"latency_ms": now_ms_since(started_at)}

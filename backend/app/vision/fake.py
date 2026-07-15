@@ -26,7 +26,11 @@ class FakeVisionService:
         self.calls: list[tuple[bytes, str | None]] = []
 
     def extract_label(
-        self, image_bytes: bytes, content_type: str | None = None
+        self,
+        image_bytes: bytes,
+        content_type: str | None = None,
+        *,
+        deadline: float | None = None,
     ) -> ExtractedLabel:
         """Record the call and return the configured fixture label."""
         self.calls.append((image_bytes, content_type))

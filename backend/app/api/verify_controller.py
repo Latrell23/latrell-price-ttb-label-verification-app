@@ -1,5 +1,6 @@
 import concurrent.futures
 import logging
+import time
 
 from fastapi import Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -23,7 +24,7 @@ from app.api.timing import (
 from app.api.validation import read_validated_image, validate_application_fields
 from app.responses import error_response
 from app.verification import BatchVerificationResponse, VerificationResult, verify_label
-from app.vision import extract_label_with_timeout
+from app.vision import DEFAULT_TIMEOUT_SECONDS, extract_label_with_timeout
 from app.vision.dependencies import VisionServiceDependency, resolve_vision_service
 
 
@@ -38,6 +39,7 @@ async def verify_label_request(
 ) -> VerificationResult | JSONResponse:
     """Orchestrate a single label verification request."""
     started_at = now_counter()
+    deadline = time.monotonic() + DEFAULT_TIMEOUT_SECONDS
     status_code = 500
     verdict: str | None = None
 
@@ -60,6 +62,7 @@ async def verify_label_request(
                 image_bytes,
                 image.content_type if image is not None else None,
                 executor,
+                deadline=deadline,
             )
         finally:
             executor.shutdown(wait=False, cancel_futures=True)

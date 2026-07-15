@@ -7,7 +7,11 @@ class VisionService(Protocol):
     """Protocol for services that extract structured label fields from images."""
 
     def extract_label(
-        self, image_bytes: bytes, content_type: str | None = None
+        self,
+        image_bytes: bytes,
+        content_type: str | None = None,
+        *,
+        deadline: float | None = None,
     ) -> ExtractedLabel:
         """Extract structured label fields from image bytes."""
 

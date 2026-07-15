@@ -271,6 +271,14 @@ export OPENAI_REASONING_EFFORT=minimal
 backend/.venv/bin/python backend/scripts/benchmark_phase6.py --runs 30 --jsonl /tmp/ttb-phase6-openai.jsonl
 ```
 
+Run the deployed endpoint benchmark after one warmup request. It records JSON
+error codes and response content types so application 502s can be distinguished
+from hosting proxy failures:
+
+```bash
+backend/.venv/bin/python scripts/live_verify_benchmark.py --runs 30 --warmups 1
+```
+
 Tune image settings without changing application code:
 
 ```bash
@@ -381,7 +389,7 @@ window.APP_CONFIG = {
 | Tradeoff | Reason |
 | --- | --- |
 | Batch cap defaults to `5` | Keeps memory and concurrent provider calls bounded on free-tier hosting. |
-| Backend and SDK timeouts are both enforced | The OpenAI client uses the 4.9s deadline with SDK retries disabled; the app retries one transient provider failure inside the same 5s endpoint budget. |
+| Backend and SDK timeouts are both enforced | One 4.6s backend deadline covers preprocessing and extraction, with 150ms reserved for response completion. SDK retries are disabled; the app retries one fast connection or provider 5xx failure only when at least 2.25s remain. |
 | OpenAI is the only production provider | Keeps deployment simple while requiring the model choice to be explicit in the environment. |
 | Static frontend config is committed | Vercel static hosting has no runtime server env; public backend URL and row cap are safe client config. |
 | No authentication or persistence | The proof of concept focuses on demonstrable label verification behavior. |

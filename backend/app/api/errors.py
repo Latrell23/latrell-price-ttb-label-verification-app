@@ -16,6 +16,22 @@ from app.vision import (
 LOGGER = logging.getLogger("app.main")
 
 
+def _log_vision_failure(exception: Exception, context: str) -> None:
+    reason = (
+        exception.reason
+        if isinstance(exception, VisionAPIError)
+        else "parse_failure"
+    )
+    LOGGER.warning(
+        "vision_request_failed",
+        extra={
+            "context": context,
+            "failure_reason": reason,
+            "exception_type": exception.__class__.__name__,
+        },
+    )
+
+
 def error_payload(
     code: str,
     message: str,
@@ -50,11 +66,13 @@ def vision_exception_error(exception: Exception) -> APIError:
             "Vision service is not configured.",
         )
     if isinstance(exception, VisionAPIError):
+        _log_vision_failure(exception, "batch_item")
         return error_payload(
             "vision_extraction_failed",
             "Vision extraction failed. Please try again.",
         )
     if isinstance(exception, VisionParseError):
+        _log_vision_failure(exception, "batch_item")
         return error_payload(
             "vision_result_unreadable",
             "Vision extraction returned an unreadable result.",
@@ -83,12 +101,14 @@ def vision_exception_response(exception: Exception) -> JSONResponse | None:
             "Vision service is not configured.",
         )
     if isinstance(exception, VisionAPIError):
+        _log_vision_failure(exception, "verify")
         return error_response(
             502,
             "vision_extraction_failed",
             "Vision extraction failed. Please try again.",
         )
     if isinstance(exception, VisionParseError):
+        _log_vision_failure(exception, "verify")
         return error_response(
             502,
             "vision_result_unreadable",

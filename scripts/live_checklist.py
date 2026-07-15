@@ -143,7 +143,17 @@ def _request_json(
 
 def _json_response(response: httpx.Response, label: str) -> dict[str, Any]:
     if response.status_code != 200:
-        raise SmokeFailure(f"{label} returned HTTP {response.status_code}")
+        content_type = response.headers.get("content-type", "")
+        try:
+            payload = response.json()
+        except json.JSONDecodeError:
+            payload = None
+        error = payload.get("error") if isinstance(payload, dict) else None
+        error_code = error.get("code") if isinstance(error, dict) else None
+        failure_kind = error_code or f"non-JSON {content_type or 'unknown content type'}"
+        raise SmokeFailure(
+            f"{label} returned HTTP {response.status_code} ({failure_kind})"
+        )
     try:
         payload = response.json()
     except json.JSONDecodeError as exc:
