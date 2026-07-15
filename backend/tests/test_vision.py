@@ -374,9 +374,9 @@ def test_preprocessor_accepts_heic_uploads() -> None:
 def test_preprocessor_default_max_edge_is_latency_optimized() -> None:
     processed = ImagePreprocessor().process(image_bytes((3200, 2400)))
 
-    assert DEFAULT_JPEG_QUALITY == 82
-    assert processed.width == 1280
-    assert processed.height == 960
+    assert DEFAULT_JPEG_QUALITY == 80
+    assert processed.width == 1152
+    assert processed.height == 864
 
 
 def test_invalid_image_bytes_raise_validation_error_without_api_call() -> None:

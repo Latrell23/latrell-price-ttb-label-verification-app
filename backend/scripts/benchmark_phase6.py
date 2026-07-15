@@ -62,7 +62,7 @@ def main() -> int:
     parser.add_argument("--mock", action="store_true", help="Use FakeVisionService.")
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_SECONDS)
     parser.add_argument("--max-edge", type=int, default=DEFAULT_MAX_IMAGE_EDGE)
-    parser.add_argument("--jpeg-quality", type=int, default=82)
+    parser.add_argument("--jpeg-quality", type=int, default=80)
     parser.add_argument("--jsonl", type=Path, help="Optional path for per-run JSONL output.")
     args = parser.parse_args()
 

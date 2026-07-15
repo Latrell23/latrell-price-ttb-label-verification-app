@@ -274,7 +274,7 @@ backend/.venv/bin/python backend/scripts/benchmark_phase6.py --runs 30 --jsonl /
 Tune image settings without changing application code:
 
 ```bash
-backend/.venv/bin/python backend/scripts/benchmark_phase6.py --runs 30 --max-edge 1280 --jpeg-quality 82 --jsonl /tmp/ttb-phase6-1280-q82.jsonl
+backend/.venv/bin/python backend/scripts/benchmark_phase6.py --runs 30 --max-edge 1152 --jpeg-quality 80 --jsonl /tmp/ttb-phase6-1152-q80.jsonl
 ```
 
 Benchmark targets are for warm backend requests and exclude Render free-plan
@@ -294,6 +294,8 @@ Measured deployed performance:
 
 | Date | Command | Sample | p50 | p95 | Result |
 | --- | --- | --- | --- | --- | --- |
+| 2026-07-14 | Immediate rerun of 30-request live `/verify` benchmark on `gpt-5.4-nano` with `OPENAI_REASONING_EFFORT=none` | committed JPEG fixture | 2472 ms | 3190 ms | Successful responses stayed accurate and fast: 27 of 30 requests succeeded and all successful responses returned `APPROVED`; 3 requests returned HTTP 502, showing provider reliability variance. |
+| 2026-07-14 | 30-run live `/verify` benchmark after switching to `gpt-5.4-nano` with `OPENAI_REASONING_EFFORT=none` | committed JPEG fixture | 2428 ms | 2727 ms | Best accuracy/latency result so far: 29 of 30 requests succeeded and all 29 successful responses returned `APPROVED`; 1 request still returned HTTP 502. |
 | 2026-07-14 | Immediate warm rerun of 30-request live `/verify` benchmark after bounded retry redeploy | committed JPEG fixture | 2408 ms | 3333 ms | Warm successful responses met latency targets and reliability improved to 29 of 30 successful requests; 1 late request still returned HTTP 502. |
 | 2026-07-14 | 30-run live `/verify` benchmark against `https://latrell-price-ttb-label-verification-app.onrender.com` after 1 warmup request, after bounded retry redeploy | committed JPEG fixture | 2480 ms | 3049 ms | Successful responses were faster, but reliability remained 28 of 30 successful requests; 2 requests still returned HTTP 502. |
 | 2026-07-14 | 30-run live `/verify` benchmark against `https://latrell-price-ttb-label-verification-app.onrender.com` after 1 warmup request, after 4.9s timeout redeploy | committed JPEG fixture | 2369 ms | 3813 ms | Successful responses met warm latency targets, but reliability was 28 of 30 successful requests; 2 requests still returned HTTP 502 near the endpoint timeout. |
@@ -305,8 +307,8 @@ Measured deployed performance:
 | 2026-07-12 | `backend/scripts/benchmark_phase6.py --mock --runs 3` | deterministic fake provider | Not applicable | Not applicable | Backend/test harness passed; this validates API shape and comparison behavior, not live provider latency. |
 
 The latest 2026-07-14 live benchmark reports API `latency_ms` percentiles for
-the 29 successful responses. Wall-clock latency over the network was p50 2623
-ms, p95 3587 ms, and max 4171 ms.
+the 27 successful responses. Wall-clock latency over the network was p50 2716
+ms, p95 3345 ms, and max 3683 ms.
 
 Cold-start behavior: Render free-tier services may take longer than the 5s
 warm-request target after idle spin-down. The latency SLA is evaluated on warm
