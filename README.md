@@ -14,7 +14,7 @@ Repository: https://github.com/Latrell23/latrell-price-ttb-label-verification-ap
 - Backend API base: https://latrell-price-ttb-label-verification-app.onrender.com
 
 Render free-tier services can spin down after idle time, so the first request
-after idle may be slower than warm requests.
+after idle may be slower than warm requests. ( Give 5 - 10 minutes )
 
 ## Features
 
