@@ -85,6 +85,51 @@ export async function postSingleVerification(formData) {
   }
 }
 
+// Loads the backend-owned simulated review queue.
+export async function getReviewLabels() {
+  const response = await fetch(`${API_BASE_URL}/review/labels`, {
+    headers: { Accept: "application/json" },
+  });
+  return response;
+}
+
+// Verifies one backend-owned review label.
+export async function postReviewLabelVerification(labelId) {
+  const timeout = createRequestTimeout();
+
+  try {
+    return await fetch(
+      `${API_BASE_URL}/review/labels/${encodeURIComponent(labelId)}/verify`,
+      {
+        method: "POST",
+        headers: { Accept: "application/json" },
+        signal: timeout.signal,
+      }
+    );
+  } catch (error) {
+    timeout.handleError(error);
+  } finally {
+    timeout.clear();
+  }
+}
+
+// Verifies every backend-owned review label in the queue.
+export async function postReviewQueueVerification() {
+  const timeout = createRequestTimeout();
+
+  try {
+    return await fetch(`${API_BASE_URL}/review/verify`, {
+      method: "POST",
+      headers: { Accept: "application/json" },
+      signal: timeout.signal,
+    });
+  } catch (error) {
+    timeout.handleError(error);
+  } finally {
+    timeout.clear();
+  }
+}
+
 // Sends a streaming batch verification request.
 export async function postBatchVerification(formData) {
   const timeout = createRequestTimeout();

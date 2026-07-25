@@ -1,9 +1,10 @@
-# TTB Label Verification
+# TTB Label Reviewer
 
-Proof-of-concept final submission build for comparing TTB alcohol label image
-fields against expected application fields. The app extracts label text from an
-uploaded image, normalizes comparable values, and returns field-level
-`PASS`/`FAIL` results with an overall `APPROVED` or `NEEDS REVIEW` status.
+Reviewer-focused proof of concept for comparing backend-provided TTB alcohol
+label JSON against the visible text on each label image. The app loads a
+simulated backend review queue, uses AI vision extraction on the image, and
+returns field-level `PASS`/`FAIL` results with an overall `APPROVED` or
+`NEEDS REVIEW` status.
 
 Repository: https://github.com/Latrell23/latrell-price-ttb-label-verification-app
 
@@ -18,10 +19,11 @@ after idle may be slower than warm requests.
 
 ## Features
 
-- Single-label verification for JPG, PNG, and WebP uploads.
-- Batch verification with item-level results and an aggregate summary.
+- Backend-fed review queue with 5 simulated label records and label images.
+- AI review actions for one label or the full queue.
+- Session-only reviewer decisions for accepted or flagged labels.
+- Legacy single-label and batch verification APIs for JPG, PNG, and WebP uploads.
 - Field-level `PASS`/`FAIL` comparisons for expected application fields.
-- Strict government warning comparison, including capitalization.
 - Fuzzy text matching for label text fields.
 - Numeric ABV and volume/unit normalization.
 - Country synonym handling.
@@ -43,8 +45,11 @@ after idle may be slower than warm requests.
 ## Runtime Architecture
 
 - Frontend: static HTML/CSS with native browser JavaScript modules.
-- Backend: FastAPI verification API with `/health`, `/verify`, and
+- Backend: FastAPI review and verification API with `/health`, `/review/labels`,
+  `/review/labels/{label_id}/verify`, `/review/verify`, `/verify`, and
   `/verify/batch` routes.
+- Review fixtures: backend-owned JSON and JPEG label images under
+  `backend/app/review/fixtures`.
 - Vision extraction: OpenAI Responses API with image input and Pydantic
   Structured Outputs. The production model is selected through
   `OPENAI_MODEL`; the repository does not hardcode a model ID.
@@ -113,7 +118,8 @@ cd frontend
 python3 -m http.server 5173
 ```
 
-Open `http://localhost:5173`. The frontend reads its backend URL from
+Open `http://localhost:5173`. The frontend loads the backend review queue from
+`/review/labels` and reads its backend URL from
 `frontend/config.js`. For local development against a local backend, set:
 
 ```js
@@ -132,7 +138,29 @@ window.APP_CONFIG = {
 };
 ```
 
-## API Examples
+## Reviewer API Examples
+
+List backend-simulated labels:
+
+```bash
+curl -sS http://localhost:8000/review/labels
+```
+
+Verify one simulated label:
+
+```bash
+curl -sS -X POST http://localhost:8000/review/labels/label-001/verify \
+  -H 'Accept: application/json'
+```
+
+Verify the full simulated queue:
+
+```bash
+curl -sS -X POST http://localhost:8000/review/verify \
+  -H 'Accept: application/json'
+```
+
+## Legacy Upload API Examples
 
 Generate a sample JPEG label for the `curl` examples:
 
@@ -211,7 +239,7 @@ Comparison logic lives in `backend/app/verification/engine.py`.
 | `abv` | Numeric ABV parse; pass when values differ by no more than `±0.1`. |
 | `net_contents` | Unit-normalized milliliter comparison; supports mL, L, cL, and fluid ounces; tolerance `±1 mL`. |
 | `country_of_origin` | Punctuation-insensitive country normalization plus synonym groups such as USA / United States. |
-| `government_warning` | Exact, case-sensitive comparison after whitespace collapse. |
+| `government_warning` | Exact, case-insensitive comparison after whitespace collapse. |
 
 ## Running Tests
 
@@ -227,10 +255,10 @@ Run the comparison engine tests:
 backend/.venv/bin/pytest backend/tests/test_verification.py
 ```
 
-Show the strict case-sensitive government warning test:
+Show the government warning comparison tests:
 
 ```bash
-backend/.venv/bin/pytest backend/tests/test_verification.py -k government_warning_title_case_fails_strict_case_sensitive_comparison -vv
+backend/.venv/bin/pytest backend/tests/test_verification.py -k government_warning -vv
 ```
 
 Run the vision sample script with mock extraction data:

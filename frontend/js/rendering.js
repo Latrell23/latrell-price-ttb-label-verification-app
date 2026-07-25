@@ -6,7 +6,10 @@ export function formatVerdict(verdict) {
 }
 
 // Builds one field comparison row for single and batch results.
-export function createFieldResultRow(result) {
+export function createFieldResultRow(
+  result,
+  labels = { expected: "Expected", found: "Found" }
+) {
   const field = FIELDS.find((item) => item.name === result.field);
   const row = document.createElement("article");
   const statusPass = result.status === "PASS";
@@ -29,9 +32,11 @@ export function createFieldResultRow(result) {
     const details = document.createElement("div");
     details.className = "result-details";
     details.innerHTML = `
-      <p><strong>Expected:</strong> <span></span></p>
-      <p><strong>Found:</strong> <span></span></p>
+      <p><strong></strong> <span></span></p>
+      <p><strong></strong> <span></span></p>
     `;
+    details.querySelector("p:first-child strong").textContent = `${labels.expected}:`;
+    details.querySelector("p:last-child strong").textContent = `${labels.found}:`;
     details.querySelector("p:first-child span").textContent = result.expected || "";
     details.querySelector("p:last-child span").textContent =
       result.found === null || result.found === undefined || result.found === ""
