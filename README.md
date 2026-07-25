@@ -89,8 +89,10 @@ values in your shell, local untracked `.env`, or deployment provider settings.
 | `OPENAI_REASONING_EFFORT` | No | none | Optional Responses API reasoning effort for models that support it; use the lowest supported value for latency-focused runs, such as `minimal` on `gpt-5-nano`. |
 | `MAX_BATCH_ITEMS` | No | `5` | Backend per-request batch item cap, enforced before image bytes are read. |
 | `MAX_BATCH_CONCURRENCY` | No | `3` | Maximum concurrent vision extractions inside one batch request. |
+| `REVIEW_TIMEOUT_SECONDS` | No | `20` | Per-label AI extraction budget for backend-owned reviewer fixtures. |
 | `API_BASE_URL` | Frontend config only | `http://localhost:8000` | Backend base URL used by `frontend/config.js` / `window.APP_CONFIG`. |
 | `MAX_BATCH_ROWS` | Frontend config only | `5` | Frontend row cap kept aligned with backend `MAX_BATCH_ITEMS`. |
+| `REVIEW_TIMEOUT_MS` | Frontend config only | `45000` | Browser timeout for one-label and full-queue reviewer AI calls. |
 
 Example local backend env:
 
@@ -102,6 +104,7 @@ export OPENAI_MODEL=<your vision-capable OpenAI model>
 export OPENAI_REASONING_EFFORT=minimal
 export MAX_BATCH_ITEMS=5
 export MAX_BATCH_CONCURRENCY=3
+export REVIEW_TIMEOUT_SECONDS=20
 ```
 
 Start the backend:
@@ -126,6 +129,7 @@ Open `http://localhost:5173`. The frontend loads the backend review queue from
 window.APP_CONFIG = {
   API_BASE_URL: "http://localhost:8000",
   MAX_BATCH_ROWS: 5,
+  REVIEW_TIMEOUT_MS: 45000,
 };
 ```
 
@@ -135,6 +139,7 @@ For local development against the deployed Render backend, set:
 window.APP_CONFIG = {
   API_BASE_URL: "https://latrell-price-ttb-label-verification-app.onrender.com",
   MAX_BATCH_ROWS: 5,
+  REVIEW_TIMEOUT_MS: 45000,
 };
 ```
 

@@ -22,6 +22,7 @@ export function initializeReviewApp() {
     labels: [],
     results: new Map(),
     decisions: new Map(),
+    submittedIds: new Set(),
     loadingIds: new Set(),
     loadingAll: false,
   };
@@ -81,6 +82,7 @@ async function runSingleReview(elements, state, labelId) {
 
     state.results.set(labelId, body);
     state.decisions.delete(labelId);
+    state.submittedIds.delete(labelId);
   } catch (error) {
     showError(
       elements,
@@ -114,6 +116,7 @@ async function runAllReviews(elements, state) {
     (body.items || []).forEach((item) => {
       state.results.set(item.client_id, item);
       state.decisions.delete(item.client_id);
+      state.submittedIds.delete(item.client_id);
     });
   } catch (error) {
     showError(
@@ -156,6 +159,7 @@ function renderReviewSummary(elements, state) {
   const flagged = Array.from(state.decisions.values()).filter(
     (decision) => decision === "flagged"
   ).length;
+  const submitted = state.submittedIds.size;
 
   elements.queueSummary.innerHTML = "";
   [
@@ -165,6 +169,7 @@ function renderReviewSummary(elements, state) {
     ["Needs review", needsReview],
     ["Accepted", accepted],
     ["Flagged", flagged],
+    ["Submitted", submitted],
   ].forEach(([label, value]) => {
     const item = document.createElement("div");
     item.className = "review-stat";
@@ -179,6 +184,7 @@ function renderReviewSummary(elements, state) {
 function createReviewCard(label, state, elements) {
   const item = state.results.get(label.id);
   const decision = state.decisions.get(label.id);
+  const submitted = state.submittedIds.has(label.id);
   const loading = state.loadingIds.has(label.id);
   const completed = item && item.status === "completed" && item.result;
   const approved = completed && item.result.overall_verdict === "APPROVED";
@@ -207,7 +213,7 @@ function createReviewCard(label, state, elements) {
   header.querySelector("p").textContent = `${label.expected.class_type} | ${label.expected.abv} | ${label.expected.net_contents}`;
   const status = header.querySelector(".result-status");
   status.classList.add(approved ? "pass" : "fail");
-  status.textContent = statusText(item, loading, decision);
+  status.textContent = statusText(item, loading, decision, submitted);
   card.append(header);
 
   const expected = document.createElement("dl");
@@ -244,9 +250,21 @@ function createReviewCard(label, state, elements) {
       () => setDecision(elements, state, label.id, "flagged"),
       !completed,
       decision === "flagged"
+    ),
+    actionButton(
+      submitted ? "Review Submitted" : "Submit Review",
+      () => submitReview(elements, state, label.id),
+      !decision || submitted
     )
   );
   card.append(actions);
+
+  if (submitted) {
+    const submittedNote = document.createElement("p");
+    submittedNote.className = "review-submitted-note";
+    submittedNote.textContent = `Prototype review submitted as ${REVIEW_DECISIONS[decision].toLowerCase()}.`;
+    card.append(submittedNote);
+  }
 
   return card;
 }
@@ -276,7 +294,7 @@ function createReviewResult(item) {
   item.result.results.forEach((fieldResult) => {
     details.append(
       createFieldResultRow(fieldResult, {
-        expected: "JSON value",
+        expected: "Application Value",
         found: "Image value",
       })
     );
@@ -299,13 +317,26 @@ function actionButton(label, onClick, disabled = false, selected = false) {
 
 function setDecision(elements, state, labelId, decision) {
   state.decisions.set(labelId, decision);
+  state.submittedIds.delete(labelId);
   renderReviewQueue(elements, state);
 }
 
 
-function statusText(item, loading, decision) {
+function submitReview(elements, state, labelId) {
+  if (!state.decisions.has(labelId)) {
+    return;
+  }
+  state.submittedIds.add(labelId);
+  renderReviewQueue(elements, state);
+}
+
+
+function statusText(item, loading, decision, submitted) {
   if (loading) {
     return "REVIEWING";
+  }
+  if (submitted) {
+    return "SUBMITTED";
   }
   if (decision) {
     return REVIEW_DECISIONS[decision];

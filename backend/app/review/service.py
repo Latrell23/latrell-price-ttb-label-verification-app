@@ -1,6 +1,7 @@
 import asyncio
 import concurrent.futures
 import json
+import os
 import time
 from functools import lru_cache
 from pathlib import Path
@@ -23,6 +24,7 @@ from app.vision import DEFAULT_TIMEOUT_SECONDS, VisionService, extract_label_wit
 REVIEW_FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures"
 REVIEW_LABELS_PATH = REVIEW_FIXTURE_DIR / "labels.json"
 REVIEW_IMAGE_DIR = REVIEW_FIXTURE_DIR / "images"
+DEFAULT_REVIEW_TIMEOUT_SECONDS = 20.0
 
 
 class ReviewLabelPublic(BaseModel):
@@ -74,6 +76,18 @@ def get_review_label(label_id: str) -> ReviewLabel | None:
     )
 
 
+def review_timeout_seconds() -> float:
+    """Return the per-label AI extraction budget for reviewer fixtures."""
+    try:
+        configured = float(
+            os.getenv("REVIEW_TIMEOUT_SECONDS", str(DEFAULT_REVIEW_TIMEOUT_SECONDS))
+        )
+    except ValueError:
+        return DEFAULT_REVIEW_TIMEOUT_SECONDS
+
+    return max(DEFAULT_TIMEOUT_SECONDS, configured)
+
+
 async def verify_review_label(
     *,
     label: ReviewLabel,
@@ -86,7 +100,7 @@ async def verify_review_label(
             label=label,
             vision_service=vision_service,
             executor=executor,
-            deadline=time.monotonic() + DEFAULT_TIMEOUT_SECONDS,
+            deadline=time.monotonic() + review_timeout_seconds(),
         )
     finally:
         executor.shutdown(wait=False, cancel_futures=True)
@@ -112,7 +126,7 @@ async def verify_review_queue(
                     vision_service=vision_service,
                     executor=executor,
                     semaphore=semaphore,
-                    deadline=time.monotonic() + DEFAULT_TIMEOUT_SECONDS,
+                    deadline=time.monotonic() + review_timeout_seconds(),
                 )
                 for label in labels
             ]

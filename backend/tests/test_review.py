@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 
 from fastapi.responses import JSONResponse
 
@@ -34,6 +35,7 @@ class ReviewVisionService:
             extraction_confidence=0.98,
         )
         self.calls: list[tuple[bytes, str | None]] = []
+        self.deadlines: list[float | None] = []
 
     def extract_label(
         self,
@@ -43,6 +45,7 @@ class ReviewVisionService:
         deadline: float | None = None,
     ) -> ExtractedLabel:
         self.calls.append((image_bytes, content_type))
+        self.deadlines.append(deadline)
         return self.label
 
 
@@ -84,6 +87,17 @@ def test_verify_review_label_uses_fixture_image_and_expected_json(monkeypatch) -
     assert body["result"]["overall_verdict"] == "APPROVED"
     assert service.calls[0][1] == "image/jpeg"
     assert service.calls[0][0].startswith(b"\xff\xd8")
+
+
+def test_verify_review_label_uses_review_timeout_budget(monkeypatch) -> None:
+    service = ReviewVisionService()
+    monkeypatch.setenv("REVIEW_TIMEOUT_SECONDS", "12")
+    monkeypatch.setattr("app.routes.review.get_vision_service", lambda: service)
+
+    asyncio.run(verify_review_label_endpoint("label-001"))
+
+    assert service.deadlines[0] is not None
+    assert service.deadlines[0] - time.monotonic() > 10
 
 
 def test_verify_review_queue_returns_batch_summary(monkeypatch) -> None:

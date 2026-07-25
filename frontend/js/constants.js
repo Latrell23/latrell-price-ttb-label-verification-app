@@ -7,6 +7,7 @@ function positiveInteger(value, fallback) {
 
 export const API_BASE_URL = (config.API_BASE_URL || "http://localhost:8000").replace(/\/$/, "");
 export const FRONTEND_TIMEOUT_MS = 5000;
+export const REVIEW_TIMEOUT_MS = positiveInteger(config.REVIEW_TIMEOUT_MS, 45000);
 export const MAX_BATCH_ROWS = positiveInteger(config.MAX_BATCH_ROWS, 5);
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 export const SUPPORTED_IMAGE_TYPE_PREFIX = "image/";

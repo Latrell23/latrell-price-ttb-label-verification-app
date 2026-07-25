@@ -1,4 +1,4 @@
-import { API_BASE_URL, FRONTEND_TIMEOUT_MS } from "./constants.js";
+import { API_BASE_URL, FRONTEND_TIMEOUT_MS, REVIEW_TIMEOUT_MS } from "./constants.js";
 
 export class FrontendTimeoutError extends Error {
   constructor(message = "The verification service timed out.") {
@@ -95,7 +95,7 @@ export async function getReviewLabels() {
 
 // Verifies one backend-owned review label.
 export async function postReviewLabelVerification(labelId) {
-  const timeout = createRequestTimeout();
+  const timeout = createRequestTimeout(REVIEW_TIMEOUT_MS);
 
   try {
     return await fetch(
@@ -115,7 +115,7 @@ export async function postReviewLabelVerification(labelId) {
 
 // Verifies every backend-owned review label in the queue.
 export async function postReviewQueueVerification() {
-  const timeout = createRequestTimeout();
+  const timeout = createRequestTimeout(REVIEW_TIMEOUT_MS);
 
   try {
     return await fetch(`${API_BASE_URL}/review/verify`, {

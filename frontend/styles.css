@@ -182,7 +182,7 @@ h3 {
 .review-summary {
   display: grid;
   gap: var(--space-3);
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   margin-bottom: var(--space-5);
 }
 
@@ -300,6 +300,16 @@ h3 {
 
 .review-actions .secondary-button.compact {
   margin-top: 0;
+}
+
+.review-submitted-note {
+  background: var(--color-green-light);
+  border-left: 6px solid var(--color-green);
+  color: #19311e;
+  font-weight: 700;
+  line-height: 1.4;
+  margin: var(--space-4) 0 0;
+  padding: var(--space-3);
 }
 
 .secondary-button.selected {
