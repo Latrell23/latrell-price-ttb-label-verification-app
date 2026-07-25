@@ -218,6 +218,8 @@ h3 {
   border: 1px solid var(--color-border);
   border-left-width: 8px;
   border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
   padding: var(--space-5);
 }
 
@@ -231,20 +233,37 @@ h3 {
   border-left-color: #c05600;
 }
 
-.review-card-header {
+.review-card-layout {
   align-items: start;
   display: grid;
-  gap: var(--space-4);
-  grid-template-columns: 160px minmax(0, 1fr) auto;
+  gap: var(--space-6);
+  grid-template-columns: minmax(300px, 1fr) minmax(0, 2fr);
 }
 
-.review-thumbnail {
+.review-image-pane {
+  min-width: 0;
+}
+
+.review-image {
   aspect-ratio: 3 / 4;
   background: var(--color-surface-alt);
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius);
-  object-fit: cover;
-  width: 160px;
+  display: block;
+  max-height: 780px;
+  object-fit: contain;
+  width: 100%;
+}
+
+.review-detail-pane {
+  min-width: 0;
+}
+
+.review-card-header {
+  align-items: start;
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .review-title-block h2 {
@@ -259,11 +278,21 @@ h3 {
   margin-bottom: 0;
 }
 
+.review-run-control {
+  border-bottom: 1px solid var(--color-border-light);
+  margin-top: var(--space-4);
+  padding-bottom: var(--space-4);
+}
+
+.review-run-control .secondary-button.compact {
+  margin-top: 0;
+}
+
 .expected-grid {
   display: grid;
   gap: var(--space-3);
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin: var(--space-5) 0 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: var(--space-4) 0 0;
 }
 
 .expected-grid div {
@@ -291,11 +320,36 @@ h3 {
   padding-top: var(--space-4);
 }
 
+.review-confidence {
+  background: #eff6fb;
+  border-left: 6px solid var(--color-blue);
+  color: var(--color-navy-dark);
+  margin: var(--space-3) 0 0;
+  padding: var(--space-3);
+}
+
+.review-confidence span {
+  color: var(--color-muted);
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 700;
+  margin-bottom: var(--space-1);
+}
+
+.review-confidence strong {
+  color: var(--color-navy-dark);
+  display: block;
+  font-size: 1.25rem;
+  line-height: 1.3;
+}
+
 .review-actions {
+  border-top: 1px solid var(--color-border-light);
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3);
   margin-top: var(--space-5);
+  padding-top: var(--space-4);
 }
 
 .review-actions .secondary-button.compact {
@@ -726,6 +780,56 @@ button:disabled {
   margin-bottom: 0;
 }
 
+.warning-diff {
+  border-top: 1px solid #f7b267;
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+}
+
+.warning-diff-note {
+  background: var(--color-orange-light);
+  border-left: 6px solid #c05600;
+  color: #4d2d00;
+  font-weight: 700;
+  line-height: 1.4;
+  margin-bottom: var(--space-4);
+  padding: var(--space-3);
+}
+
+.warning-diff-grid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.warning-diff-block {
+  background: #ffffff;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius);
+  padding: var(--space-3);
+}
+
+.warning-diff-block h4 {
+  color: var(--color-navy-dark);
+  font-size: 1rem;
+  margin: 0 0 var(--space-2);
+}
+
+.warning-diff-block p {
+  line-height: 1.6;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.warning-diff-highlight {
+  background: var(--color-red-light);
+  border: 1px solid var(--color-red);
+  border-radius: var(--radius);
+  color: var(--color-red-dark);
+  font-weight: 700;
+  padding: 1px 3px;
+}
+
 @media (max-width: 980px) {
   .verification-layout,
   .batch-row-body {
@@ -736,17 +840,8 @@ button:disabled {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .review-card-header {
-    grid-template-columns: 120px minmax(0, 1fr);
-  }
-
-  .review-card-header .result-status {
-    grid-column: 1 / -1;
-    width: max-content;
-  }
-
-  .review-thumbnail {
-    width: 120px;
+  .review-card-layout {
+    grid-template-columns: minmax(240px, 0.9fr) minmax(0, 1.4fr);
   }
 
   .expected-grid {
@@ -792,18 +887,18 @@ button:disabled {
   }
 
   .review-summary,
+  .warning-diff-grid,
   .expected-grid {
     grid-template-columns: 1fr;
   }
 
+  .review-card-layout,
   .review-card-header {
     grid-template-columns: 1fr;
   }
 
-  .review-thumbnail {
+  .review-image {
     max-height: 360px;
-    object-fit: contain;
-    width: 100%;
   }
 
   .mode-tab {

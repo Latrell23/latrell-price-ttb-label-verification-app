@@ -6,7 +6,12 @@ import {
   postReviewLabelVerification,
   postReviewQueueVerification,
 } from "./api.js";
-import { createFieldResultRow, failedFieldCount, formatVerdict } from "./rendering.js";
+import {
+  createFieldResultRow,
+  failedFieldCount,
+  formatConfidence,
+  formatVerdict,
+} from "./rendering.js";
 
 
 const REVIEW_DECISIONS = {
@@ -197,24 +202,46 @@ function createReviewCard(label, state, elements) {
   const imageUrl = label.image_url.startsWith("http")
     ? label.image_url
     : `${API_BASE_URL}${label.image_url}`;
+  const layout = document.createElement("div");
+  layout.className = "review-card-layout";
+
+  const imagePane = document.createElement("section");
+  imagePane.className = "review-image-pane";
+  imagePane.innerHTML = `
+    <img class="review-image" alt="" />
+  `;
+  imagePane.querySelector("img").src = imageUrl;
+  imagePane.querySelector("img").alt = `${label.title} label`;
+
+  const detailPane = document.createElement("section");
+  detailPane.className = "review-detail-pane";
+
   const header = document.createElement("div");
   header.className = "review-card-header";
   header.innerHTML = `
-    <img class="review-thumbnail" alt="" />
     <div class="review-title-block">
       <h2></h2>
       <p></p>
     </div>
     <span class="result-status"></span>
   `;
-  header.querySelector("img").src = imageUrl;
-  header.querySelector("img").alt = `${label.title} label`;
   header.querySelector("h2").textContent = label.title;
   header.querySelector("p").textContent = `${label.expected.class_type} | ${label.expected.abv} | ${label.expected.net_contents}`;
   const status = header.querySelector(".result-status");
   status.classList.add(approved ? "pass" : "fail");
   status.textContent = statusText(item, loading, decision, submitted);
-  card.append(header);
+  detailPane.append(header);
+
+  const reviewControl = document.createElement("div");
+  reviewControl.className = "review-run-control";
+  reviewControl.append(
+    actionButton(
+      loading ? "Reviewing..." : item ? "Run AI Review Again" : "Run AI Review",
+      () => runSingleReview(elements, state, label.id),
+      loading || state.loadingAll
+    )
+  );
+  detailPane.append(reviewControl);
 
   const expected = document.createElement("dl");
   expected.className = "expected-grid";
@@ -225,20 +252,18 @@ function createReviewCard(label, state, elements) {
     wrapper.querySelector("dd").textContent = label.expected[field.name] || "";
     expected.append(wrapper);
   });
-  card.append(expected);
+  detailPane.append(expected);
 
   if (item) {
-    card.append(createReviewResult(item));
+    detailPane.append(createReviewResult(item));
   }
+
+  layout.append(imagePane, detailPane);
+  card.append(layout);
 
   const actions = document.createElement("div");
   actions.className = "review-actions";
   actions.append(
-    actionButton(
-      loading ? "Reviewing..." : item ? "Run AI Review Again" : "Run AI Review",
-      () => runSingleReview(elements, state, label.id),
-      loading || state.loadingAll
-    ),
     actionButton(
       "Accept",
       () => setDecision(elements, state, label.id, "accepted"),
@@ -285,9 +310,11 @@ function createReviewResult(item) {
   const failedCount = failedFieldCount(item.result);
   summary.textContent =
     failedCount === 0
-      ? "AI found that the JSON matches the image."
-      : `${failedCount} JSON field(s) need reviewer attention.`;
+      ? "AI found that the application information matches the label image."
+      : `${failedCount} application field(s) need reviewer attention.`;
   section.append(summary);
+
+  section.append(createConfidenceMeter(item.result));
 
   const details = document.createElement("div");
   details.className = "batch-drilldown";
@@ -301,6 +328,21 @@ function createReviewResult(item) {
   });
   section.append(details);
   return section;
+}
+
+
+function createConfidenceMeter(result) {
+  const confidence = document.createElement("div");
+  confidence.className = "review-confidence";
+  confidence.innerHTML = `
+    <div>
+      <span>AI Read Confidence</span>
+      <strong></strong>
+    </div>
+  `;
+  confidence.querySelector("strong").textContent =
+    formatConfidence(result.confidence_score || 0);
+  return confidence;
 }
 
 

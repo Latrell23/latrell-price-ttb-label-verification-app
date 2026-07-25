@@ -43,9 +43,141 @@ export function createFieldResultRow(
         ? "Not found on label"
         : result.found;
     row.append(details);
+
+    if (result.field === "government_warning") {
+      row.append(createGovernmentWarningDiff(result, labels));
+    }
   }
 
   return row;
+}
+
+// Builds a strict warning-statement helper with word-level differences.
+export function createGovernmentWarningDiff(result, labels = { expected: "Application Value", found: "Image value" }) {
+  const section = document.createElement("section");
+  section.className = "warning-diff";
+
+  const note = document.createElement("p");
+  note.className = "warning-diff-note";
+  note.textContent =
+    "Strict warning statement check failed. Review highlighted differences against the label image before rejecting.";
+  section.append(note);
+
+  const grid = document.createElement("div");
+  grid.className = "warning-diff-grid";
+  grid.append(
+    createDiffBlock(labels.expected, result.expected || "", result.found || ""),
+    createDiffBlock(labels.found, result.found || "", result.expected || "")
+  );
+  section.append(grid);
+  return section;
+}
+
+
+function createDiffBlock(title, value, comparisonValue) {
+  const block = document.createElement("article");
+  block.className = "warning-diff-block";
+  const heading = document.createElement("h4");
+  heading.textContent = title;
+  const text = document.createElement("p");
+  appendHighlightedWords(text, value, comparisonValue);
+  block.append(heading, text);
+  return block;
+}
+
+
+function appendHighlightedWords(container, value, comparisonValue) {
+  const words = tokenizeWords(value);
+  const differingIndexes = unmatchedWordIndexes(words, tokenizeWords(comparisonValue));
+
+  if (!words.length) {
+    container.textContent = "Not found on label";
+    return;
+  }
+
+  words.forEach((word, index) => {
+    const span = document.createElement("span");
+    span.textContent = word;
+    if (differingIndexes.has(index)) {
+      span.className = "warning-diff-highlight";
+    }
+    container.append(span);
+    if (index < words.length - 1) {
+      container.append(document.createTextNode(" "));
+    }
+  });
+}
+
+
+function tokenizeWords(value) {
+  return String(value || "").trim().split(/\s+/).filter(Boolean);
+}
+
+
+function unmatchedWordIndexes(words, comparisonWords) {
+  const left = words.map(normalizeDiffWord);
+  const right = comparisonWords.map(normalizeDiffWord);
+  const longestMatches = Array.from({ length: left.length + 1 }, () =>
+    Array(right.length + 1).fill(0)
+  );
+
+  for (let leftIndex = left.length - 1; leftIndex >= 0; leftIndex -= 1) {
+    for (let rightIndex = right.length - 1; rightIndex >= 0; rightIndex -= 1) {
+      longestMatches[leftIndex][rightIndex] =
+        left[leftIndex] === right[rightIndex]
+          ? longestMatches[leftIndex + 1][rightIndex + 1] + 1
+          : Math.max(
+              longestMatches[leftIndex + 1][rightIndex],
+              longestMatches[leftIndex][rightIndex + 1]
+            );
+    }
+  }
+
+  const unmatched = new Set();
+  let leftIndex = 0;
+  let rightIndex = 0;
+  while (leftIndex < left.length && rightIndex < right.length) {
+    if (left[leftIndex] === right[rightIndex]) {
+      leftIndex += 1;
+      rightIndex += 1;
+    } else if (
+      longestMatches[leftIndex + 1][rightIndex] >=
+      longestMatches[leftIndex][rightIndex + 1]
+    ) {
+      unmatched.add(leftIndex);
+      leftIndex += 1;
+    } else {
+      rightIndex += 1;
+    }
+  }
+
+  while (leftIndex < left.length) {
+    unmatched.add(leftIndex);
+    leftIndex += 1;
+  }
+
+  return unmatched;
+}
+
+
+function normalizeDiffWord(word) {
+  return word.replace(/[.,;:()]/g, "").toLowerCase();
+}
+
+// Formats a 0.0 to 1.0 backend confidence score for reviewers.
+export function formatConfidence(score) {
+  return confidenceLabel(score);
+}
+
+// Converts confidence scores into compact reviewer-facing bands.
+export function confidenceLabel(score) {
+  if (score >= 0.8) {
+    return "High";
+  }
+  if (score >= 0.5) {
+    return "Medium";
+  }
+  return "Low";
 }
 
 // Renders the full single-label verification result.

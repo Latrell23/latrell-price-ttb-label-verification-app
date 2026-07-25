@@ -50,6 +50,7 @@ class FieldResult(BaseModel):
     expected: str
     found: str | None
     status: Status
+    match_score: float
 
 
 class VerificationResult(BaseModel):
@@ -58,6 +59,7 @@ class VerificationResult(BaseModel):
     results: list[FieldResult]
     overall_verdict: OverallVerdict
     latency_ms: float
+    confidence_score: float
 
 
 class ErrorDetail(BaseModel):

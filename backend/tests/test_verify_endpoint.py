@@ -265,14 +265,21 @@ def test_verify_success_returns_full_verification_result_and_calls_mock() -> Non
 
     status_code, body = response_status_and_body(response)
     assert status_code == 200
-    assert set(body) == {"results", "overall_verdict", "latency_ms"}
+    assert set(body) == {
+        "results",
+        "overall_verdict",
+        "latency_ms",
+        "confidence_score",
+    }
     assert body["overall_verdict"] == "APPROVED"
+    assert body["confidence_score"] == 1.0
     assert body["latency_ms"] > 0
     assert len(body["results"]) == 7
     assert service.calls == [(IMAGE_BYTES, "image/jpeg")]
     for result in body["results"]:
         assert "expected" in result
         assert "found" in result
+        assert "match_score" in result
     warning = result_for_field(body, "government_warning")
     assert warning["expected"] == WARNING
     assert warning["found"] == WARNING

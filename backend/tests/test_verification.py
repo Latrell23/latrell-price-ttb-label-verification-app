@@ -75,8 +75,15 @@ def test_verification_and_batch_results_serialize_expected_shapes() -> None:
     serialized_result = result.model_dump()
     serialized_batch = batch.model_dump()
 
-    assert set(serialized_result) == {"results", "overall_verdict", "latency_ms"}
+    assert set(serialized_result) == {
+        "results",
+        "overall_verdict",
+        "latency_ms",
+        "confidence_score",
+    }
     assert len(serialized_result["results"]) == 7
+    assert all("match_score" in item for item in serialized_result["results"])
+    assert serialized_result["confidence_score"] == 1.0
     assert serialized_result["overall_verdict"] == "APPROVED"
     assert set(serialized_batch) == {"items", "summary"}
     assert serialized_batch["summary"] == {
@@ -92,7 +99,9 @@ def test_brand_passes_for_minor_ocr_typo_above_threshold() -> None:
         extracted(brand_name="Acme Estae"),
     )
 
-    assert result_for_field(result, "brand_name").status == "PASS"
+    brand = result_for_field(result, "brand_name")
+    assert brand.status == "PASS"
+    assert brand.match_score >= 0.9
 
 
 def test_case_only_brand_difference_passes() -> None:
@@ -125,7 +134,9 @@ def test_brand_fails_for_unrelated_value_below_threshold() -> None:
         extracted(brand_name="Different Winery"),
     )
 
-    assert result_for_field(result, "brand_name").status == "FAIL"
+    brand = result_for_field(result, "brand_name")
+    assert brand.status == "FAIL"
+    assert brand.match_score < 0.9
 
 
 def test_class_type_passes_despite_case_and_spacing_differences() -> None:
@@ -143,6 +154,7 @@ def test_producer_fails_when_extracted_value_is_missing() -> None:
     producer = result_for_field(result, "producer")
     assert producer.status == "FAIL"
     assert producer.found is None
+    assert producer.match_score == 0.0
 
 
 def test_usa_matches_united_states() -> None:
@@ -254,13 +266,17 @@ def test_bare_number_without_abv_context_fails() -> None:
 def test_abv_difference_within_tolerance_passes() -> None:
     result = verify_label(application(abv="13.5"), extracted(abv="13.6%"))
 
-    assert result_for_field(result, "abv").status == "PASS"
+    abv = result_for_field(result, "abv")
+    assert abv.status == "PASS"
+    assert abv.match_score == 1.0
 
 
 def test_abv_difference_greater_than_tolerance_fails() -> None:
     result = verify_label(application(abv="13.5"), extracted(abv="13.7%"))
 
-    assert result_for_field(result, "abv").status == "FAIL"
+    abv = result_for_field(result, "abv")
+    assert abv.status == "FAIL"
+    assert 0.0 < abv.match_score < 1.0
 
 
 def test_missing_or_unparseable_abv_fails() -> None:
@@ -322,7 +338,9 @@ def test_different_bottle_sizes_fail() -> None:
         extracted(net_contents="1 L"),
     )
 
-    assert result_for_field(result, "net_contents").status == "FAIL"
+    net_contents = result_for_field(result, "net_contents")
+    assert net_contents.status == "FAIL"
+    assert net_contents.match_score < 1.0
 
 
 def test_missing_or_unparseable_net_contents_fails() -> None:
@@ -398,6 +416,7 @@ def test_government_warning_missing_colon_fails() -> None:
     warning = result_for_field(result, "government_warning")
     assert warning.status == "FAIL"
     assert warning.found == missing_colon
+    assert warning.match_score > 0.9
 
 
 def test_government_warning_punctuation_difference_fails() -> None:
@@ -446,6 +465,7 @@ def test_misread_government_warning_returns_extracted_text() -> None:
     warning = result_for_field(result, "government_warning")
     assert warning.status == "FAIL"
     assert warning.found == misread
+    assert warning.match_score > 0.9
 
 
 def test_all_fields_passing_returns_approved() -> None:
@@ -458,6 +478,24 @@ def test_one_failed_field_returns_needs_review() -> None:
     result = verify_label(application(), extracted(brand_name="Wrong Brand"))
 
     assert result.overall_verdict == "NEEDS_REVIEW"
+
+
+def test_read_confidence_counts_each_field_equally() -> None:
+    result = verify_label(
+        application(),
+        extracted(government_warning=None, extraction_confidence=0.72),
+    )
+
+    assert result.confidence_score == 0.8571
+
+
+def test_read_confidence_reflects_missing_core_fields() -> None:
+    result = verify_label(
+        application(),
+        extracted(producer=None, country_of_origin=None, extraction_confidence=0.9),
+    )
+
+    assert result.confidence_score == 0.7143
 
 
 def test_batch_summary_counts_passed_needs_review_and_total() -> None:

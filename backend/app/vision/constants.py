@@ -6,9 +6,10 @@ VISION_PROMPT = """
 Extract visible TTB alcohol label fields only.
 Use null for missing, obscured, unreadable, or uncertain fields.
 Do not infer values from product knowledge or reconstruct hidden text.
-For government_warning, copy the full visible warning verbatim, preserving case,
-punctuation, spacing, line text, and the colon; if incomplete or unreadable,
-return null.
+For government_warning, copy the visible warning text verbatim, preserving case,
+punctuation, spacing, line text, and the colon. If a government warning block is
+visible but partly uncertain, return the readable visible warning text rather
+than null; return null only when no government warning text is visible.
 Set raw_text to readable visible label text, or null if none.
 Set extraction_confidence from 0.0 to 1.0 for readability/certainty.
 For non-label images, return null label fields, readable raw_text if any, and

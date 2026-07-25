@@ -64,6 +64,7 @@ def verify_label(
 ) -> VerificationResult:
     """Compare application fields with extracted label fields and return a verdict."""
     started_at = perf_counter()
+    confidence_score = _read_confidence(extracted)
 
     # Run each field through the comparison rule required for that field.
     results = [
@@ -92,6 +93,7 @@ def verify_label(
         results=results,
         overall_verdict=verdict,
         latency_ms=latency_ms,
+        confidence_score=confidence_score,
     )
 
 
@@ -126,6 +128,7 @@ def _compare_fuzzy_field(
 
     # Missing extracted values fail because there is nothing to compare.
     status = "FAIL"
+    match_score = 0.0
     if found is not None:
         normalized_expected = _normalize_text(expected)
         normalized_found = _normalize_text(found)
@@ -133,9 +136,11 @@ def _compare_fuzzy_field(
             status = (
                 "PASS" if normalized_expected == normalized_found else "FAIL"
             )
+            match_score = 1.0 if status == "PASS" else 0.0
         else:
             score = _fuzzy_score(normalized_expected, normalized_found)
             status = "PASS" if score >= FUZZY_THRESHOLD else "FAIL"
+            match_score = _clamp_score(score / 100)
 
     return FieldResult(
         field=field,
@@ -143,21 +148,24 @@ def _compare_fuzzy_field(
         expected=expected,
         found=found,
         status=status,
+        match_score=match_score,
     )
 
 
-def _compare_country(expected: str, found: str | None) -> FieldResult:
+def _compare_country(
+    expected: str,
+    found: str | None,
+) -> FieldResult:
     """Compare countries after punctuation and synonym normalization."""
     # Missing extracted countries fail because origin is a required label field.
     status = "FAIL"
+    match_score = 0.0
     if found is not None:
         normalized_expected = _normalize_country(expected)
         normalized_found = _normalize_country(found)
-        status = (
-            "PASS"
-            if _countries_match(normalized_expected, normalized_found)
-            else "FAIL"
-        )
+        countries_match = _countries_match(normalized_expected, normalized_found)
+        status = "PASS" if countries_match else "FAIL"
+        match_score = 1.0 if countries_match else 0.0
 
     return FieldResult(
         field="country_of_origin",
@@ -165,14 +173,23 @@ def _compare_country(expected: str, found: str | None) -> FieldResult:
         expected=expected,
         found=found,
         status=status,
+        match_score=match_score,
     )
 
 
-def _compare_abv(expected: str, found: str | None) -> FieldResult:
+def _compare_abv(
+    expected: str,
+    found: str | None,
+) -> FieldResult:
     """Compare ABV values numerically within the configured tolerance."""
     # Parse numbers from both values before applying the tolerance check.
     expected_value = _parse_abv(expected, allow_plain_number=True)
     found_value = _parse_abv(found) if found is not None else None
+    match_score = _numeric_match_score(
+        expected_value,
+        found_value,
+        tolerance=ABV_TOLERANCE,
+    )
     status = (
         "PASS"
         if expected_value is not None
@@ -187,14 +204,23 @@ def _compare_abv(expected: str, found: str | None) -> FieldResult:
         expected=expected,
         found=found,
         status=status,
+        match_score=match_score,
     )
 
 
-def _compare_net_contents(expected: str, found: str | None) -> FieldResult:
+def _compare_net_contents(
+    expected: str,
+    found: str | None,
+) -> FieldResult:
     """Compare net contents after converting supported units to milliliters."""
     # Convert both values into milliliters before applying the tolerance check.
     expected_ml = _parse_net_contents_ml(expected)
     found_ml = _parse_net_contents_ml(found) if found is not None else None
+    match_score = _numeric_match_score(
+        expected_ml,
+        found_ml,
+        tolerance=NET_CONTENTS_TOLERANCE_ML,
+    )
     status = (
         "PASS"
         if expected_ml is not None
@@ -209,15 +235,25 @@ def _compare_net_contents(expected: str, found: str | None) -> FieldResult:
         expected=expected,
         found=found,
         status=status,
+        match_score=match_score,
     )
 
 
-def _compare_government_warning(expected: str, found: str | None) -> FieldResult:
+def _compare_government_warning(
+    expected: str,
+    found: str | None,
+) -> FieldResult:
     """Compare the government warning exactly, ignoring OCR casing noise."""
+    expected_normalized = _normalize_government_warning(expected)
+    found_normalized = _normalize_government_warning(found) if found is not None else None
+    score = (
+        _fuzzy_score(expected_normalized, found_normalized) / 100
+        if found_normalized is not None
+        else 0.0
+    )
     status = (
         "PASS"
-        if found is not None
-        and _normalize_government_warning(expected) == _normalize_government_warning(found)
+        if found_normalized is not None and expected_normalized == found_normalized
         else "FAIL"
     )
     return FieldResult(
@@ -226,6 +262,7 @@ def _compare_government_warning(expected: str, found: str | None) -> FieldResult
         expected=expected,
         found=found,
         status=status,
+        match_score=1.0 if status == "PASS" else _clamp_score(score),
     )
 
 
@@ -334,3 +371,34 @@ def _normalize_unit(unit: str) -> str:
         return "fl oz"
 
     return normalized
+
+
+def _numeric_match_score(
+    expected: float | None,
+    found: float | None,
+    *,
+    tolerance: float,
+) -> float:
+    """Return a confidence score based on numeric distance from tolerance."""
+    if expected is None or found is None:
+        return 0.0
+
+    difference = abs(expected - found)
+    if difference <= tolerance:
+        return 1.0
+
+    denominator = max(abs(expected), abs(found), tolerance)
+    return _clamp_score(1 - (difference / denominator))
+
+
+def _read_confidence(extracted: ExtractedLabel) -> float:
+    """Return equal-field read coverage as the reviewer confidence score."""
+    found_field_count = sum(
+        getattr(extracted, field) is not None for field in FIELD_ORDER
+    )
+    return _clamp_score(found_field_count / len(FIELD_ORDER))
+
+
+def _clamp_score(value: float) -> float:
+    """Clamp scores into the public 0.0 to 1.0 range."""
+    return max(0.0, min(1.0, round(value, 4)))

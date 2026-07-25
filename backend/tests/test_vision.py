@@ -422,6 +422,18 @@ def test_incomplete_government_warning_can_return_none() -> None:
     assert actual.government_warning is None
 
 
+def test_null_like_government_warning_string_becomes_none() -> None:
+    service = OpenAIVisionService(
+        client=FakeOpenAIClient(
+            openai_response(parsed=label(government_warning="null"))
+        )
+    )
+
+    actual = service.extract_label(image_bytes())
+
+    assert actual.government_warning is None
+
+
 def test_partial_blurry_response_returns_partial_label() -> None:
     partial = label(
         class_type=None,

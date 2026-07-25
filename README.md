@@ -207,11 +207,13 @@ Success shape:
       "match_type": "FUZZY",
       "expected": "Acme Estate",
       "found": "ACME ESTATE",
-      "status": "PASS"
+      "status": "PASS",
+      "match_score": 1.0
     }
   ],
   "overall_verdict": "APPROVED",
-  "latency_ms": 842.1
+  "latency_ms": 842.1,
+  "confidence_score": 1.0
 }
 ```
 
@@ -235,6 +237,10 @@ Error shape:
 ## Comparison Rules
 
 Comparison logic lives in `backend/app/verification/engine.py`.
+Each verification result includes top-level `confidence_score` based on equal
+read coverage across all application fields. The reviewer UI shows that score as
+High, Medium, or Low. Each field result includes `match_score` for backend
+comparison closeness.
 
 | Field | Strategy |
 | --- | --- |
