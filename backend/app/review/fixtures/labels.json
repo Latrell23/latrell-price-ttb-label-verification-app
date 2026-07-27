@@ -1,0 +1,72 @@
+[
+  {
+    "id": "label-001",
+    "title": "Acme Estate Red Wine",
+    "image_file": "label-001.jpg",
+    "expected": {
+      "brand_name": "Acme Estate",
+      "class_type": "Red Wine",
+      "abv": "13.5%",
+      "net_contents": "750 mL",
+      "producer": "Acme Cellars",
+      "country_of_origin": "United States",
+      "government_warning": "GOVERNMENT WARNING: (1) ACCORDING TO THE SURGEON GENERAL, WOMEN SHOULD NOT DRINK ALCOHOLIC BEVERAGES DURING PREGNANCY BECAUSE OF THE RISK OF BIRTH DEFECTS. (2) CONSUMPTION OF ALCOHOLIC BEVERAGES IMPAIRS YOUR ABILITY TO DRIVE A CAR OR OPERATE MACHINERY, AND MAY CAUSE HEALTH PROBLEMS."
+    }
+  },
+  {
+    "id": "label-002",
+    "title": "Northstar Citrus Vodka",
+    "image_file": "label-002.jpg",
+    "expected": {
+      "brand_name": "Northstar Citrus",
+      "class_type": "Vodka",
+      "abv": "40%",
+      "net_contents": "750 mL",
+      "producer": "Northstar Distilling Co.",
+      "country_of_origin": "United States",
+      "government_warning": "GOVERNMENT WARNING: (1) ACCORDING TO THE SURGEON GENERAL, WOMEN SHOULD NOT DRINK ALCOHOLIC BEVERAGES DURING PREGNANCY BECAUSE OF THE RISK OF BIRTH DEFECTS. (2) CONSUMPTION OF ALCOHOLIC BEVERAGES IMPAIRS YOUR ABILITY TO DRIVE A CAR OR OPERATE MACHINERY, AND MAY CAUSE HEALTH PROBLEMS."
+    }
+  },
+  {
+    "id": "label-003",
+    "title": "Rio Verde Mezcal",
+    "image_file": "label-003.jpg",
+    "expected": {
+      "brand_name": "Rio Verde",
+      "class_type": "Mezcal",
+      "abv": "42%",
+      "net_contents": "750 mL",
+      "producer": "Rio Verde Spirits",
+      "country_of_origin": "Mexico",
+      "government_warning": "GOVERNMENT WARNING: (1) ACCORDING TO THE SURGEON GENERAL, WOMEN SHOULD NOT DRINK ALCOHOLIC BEVERAGES DURING PREGNANCY BECAUSE OF THE RISK OF BIRTH DEFECTS. (2) CONSUMPTION OF ALCOHOLIC BEVERAGES IMPAIRS YOUR ABILITY TO DRIVE A CAR OR OPERATE MACHINERY, AND MAY CAUSE HEALTH PROBLEMS."
+    }
+  },
+  {
+    "id": "label-004",
+    "title": "Harbor Light Lager",
+    "image_file": "label-004.jpg",
+    "expected": {
+      "brand_name": "Harbor Light",
+      "class_type": "Lager",
+      "abv": "5.0%",
+      "net_contents": "12 fl oz",
+      "producer": "Harbor Brewing",
+      "country_of_origin": "United States",
+      "government_warning": "GOVERNMENT WARNING: (1) ACCORDING TO THE SURGEON GENERAL, WOMEN SHOULD NOT DRINK ALCOHOLIC BEVERAGES DURING PREGNANCY BECAUSE OF THE RISK OF BIRTH DEFECTS. (2) CONSUMPTION OF ALCOHOLIC BEVERAGES IMPAIRS YOUR ABILITY TO DRIVE A CAR OR OPERATE MACHINERY, AND MAY CAUSE HEALTH PROBLEMS."
+    }
+  },
+  {
+    "id": "label-005",
+    "title": "Sierra Plum Brandy",
+    "image_file": "label-005.jpg",
+    "expected": {
+      "brand_name": "Sierra Plum",
+      "class_type": "Brandy",
+      "abv": "35%",
+      "net_contents": "700 mL",
+      "producer": "Sierra Orchard Spirits",
+      "country_of_origin": "France",
+      "government_warning": "GOVERNMENT WARNING: (1) ACCORDING TO THE SURGEON GENERAL, WOMEN SHOULD NOT DRINK ALCOHOLIC BEVERAGES DURING PREGNANCY BECAUSE OF THE RISK OF BIRTH DEFECTS. (2) CONSUMPTION OF ALCOHOLIC BEVERAGES IMPAIRS YOUR ABILITY TO DRIVE A CAR OR OPERATE MACHINERY, AND MAY CAUSE HEALTH PROBLEMS."
+    }
+  }
+]

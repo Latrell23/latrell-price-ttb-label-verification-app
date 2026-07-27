@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>TTB Label Verification</title>
-    <link rel="stylesheet" href="./styles.css?v=phase6-gov-layout-1" />
+    <title>TTB Label Reviewer</title>
+    <link rel="stylesheet" href="./styles.css?v=reviewer-1" />
   </head>
   <body>
     
@@ -12,164 +12,36 @@
     <header class="site-header">
       <div class="site-header-inner">
         <p class="agency-label">Alcohol Label Review</p>
-        <h1 id="title">TTB Label Verification</h1>
+        <h1 id="title">TTB Label Reviewer</h1>
         <p class="summary">
-          Choose a label image and enter the expected application information.
+          Review backend-simulated TTB label records by comparing each
+          application submission against the visible label image.
         </p>
       </div>
     </header>
 
     <main class="shell">
       <section class="panel" aria-labelledby="title">
-        <div class="mode-tabs" role="tablist" aria-label="Verification mode">
-          <button
-            id="single-tab"
-            class="mode-tab active"
-            type="button"
-            role="tab"
-            aria-selected="true"
-            aria-controls="verification-form"
-          >
-            Single Label
-          </button>
-          <button
-            id="batch-tab"
-            class="mode-tab"
-            type="button"
-            role="tab"
-            aria-selected="false"
-            aria-controls="batch-form"
-          >
-            Batch
+        <div class="review-toolbar">
+          <div>
+            <h2>Review Queue</h2>
+            <p>
+              Five simulated backend labels are ready for AI verification.
+            </p>
+          </div>
+          <button id="run-all-reviews" class="primary-button" type="button">
+            Run All AI Reviews
           </button>
         </div>
 
-        <form
-          id="verification-form"
-          class="mode-panel"
-          role="tabpanel"
-          aria-labelledby="single-tab"
-          novalidate
-        >
-          <div id="form-error" class="form-error" role="alert" hidden></div>
-
-          <div class="verification-layout">
-            <section class="form-section image-section" aria-labelledby="image-heading">
-              <h2 id="image-heading">Label Image</h2>
-              <label class="file-control" for="image">
-                <span class="file-label">Choose Label Image</span>
-                <input
-                  id="image"
-                  name="image"
-                  type="file"
-                  accept="image/*"
-                />
-              </label>
-              <p id="image-error" class="field-error" hidden></p>
-              <div id="image-preview-wrap" class="image-preview-wrap" hidden>
-                <p id="selected-file-name" class="selected-file-name"></p>
-                <img id="image-preview" alt="Selected label preview" />
-              </div>
-            </section>
-
-            <section class="form-section fields-section" aria-labelledby="fields-heading">
-              <h2 id="fields-heading">Expected Application Information</h2>
-
-              <div class="field-grid">
-                <div class="field">
-                  <label for="brand_name">Brand Name</label>
-                  <input id="brand_name" name="brand_name" type="text" autocomplete="off" />
-                  <p id="brand_name-error" class="field-error" hidden></p>
-                </div>
-
-                <div class="field">
-                  <label for="class_type">Class / Type</label>
-                  <input id="class_type" name="class_type" type="text" autocomplete="off" />
-                  <p id="class_type-error" class="field-error" hidden></p>
-                </div>
-
-                <div class="field">
-                  <label for="abv">Alcohol By Volume</label>
-                  <input id="abv" name="abv" type="text" autocomplete="off" />
-                  <p id="abv-error" class="field-error" hidden></p>
-                </div>
-
-                <div class="field">
-                  <label for="net_contents">Net Contents</label>
-                  <input id="net_contents" name="net_contents" type="text" autocomplete="off" />
-                  <p id="net_contents-error" class="field-error" hidden></p>
-                </div>
-
-                <div class="field">
-                  <label for="producer">Producer</label>
-                  <input id="producer" name="producer" type="text" autocomplete="off" />
-                  <p id="producer-error" class="field-error" hidden></p>
-                </div>
-
-                <div class="field">
-                  <label for="country_of_origin">Country of Origin</label>
-                  <input
-                    id="country_of_origin"
-                    name="country_of_origin"
-                    type="text"
-                    autocomplete="off"
-                  />
-                  <p id="country_of_origin-error" class="field-error" hidden></p>
-                </div>
-
-                <div class="field field-full">
-                  <label for="government_warning">Government Warning</label>
-                  <textarea id="government_warning" name="government_warning" rows="5"></textarea>
-                  <p id="government_warning-error" class="field-error" hidden></p>
-                </div>
-              </div>
-            </section>
-          </div>
-
-          <div id="loading-message" class="loading-message" role="status" hidden>
-            Reading the image and checking the fields. This may take a moment.
-          </div>
-
-          <button id="verify-button" class="primary-button" type="submit">
-            Verify Label
-          </button>
-        </form>
-
-        <form
-          id="batch-form"
-          class="mode-panel"
-          role="tabpanel"
-          aria-labelledby="batch-tab"
-          hidden
-          novalidate
-        >
-          <div id="batch-form-error" class="form-error" role="alert" hidden></div>
-          <div id="batch-rows" class="batch-rows"></div>
-          <button id="add-batch-row" class="secondary-button compact" type="button">
-            Add Another Label
-          </button>
-          <div id="batch-loading-message" class="loading-message" role="status" hidden></div>
-          <button id="batch-submit-button" class="primary-button" type="submit">
-            Verify Batch
-          </button>
-        </form>
-
-        <section id="results-view" class="results-view" aria-labelledby="results-heading" hidden>
-          <div id="verdict-banner" class="verdict-banner">
-            <p class="verdict-label">Result</p>
-            <h2 id="results-heading"></h2>
-          </div>
-
-          <div id="result-list" class="result-list"></div>
-
-          <button id="reset-button" class="secondary-button" type="button">
-            Check Another Label
-          </button>
-        </section>
+        <div id="review-error" class="form-error" role="alert" hidden></div>
+        <div id="review-queue-status" class="loading-message" role="status" hidden></div>
+        <section id="review-summary" class="review-summary" aria-label="Review summary"></section>
+        <section id="review-list" class="review-list" aria-label="Labels to review"></section>
       </section>
     </main>
 
     <script src="./config.js"></script>
-    <script type="module" src="./js/app.js?v=phase6-modules-1"></script>
+    <script type="module" src="./js/app.js?v=reviewer-1"></script>
   </body>
 </html>

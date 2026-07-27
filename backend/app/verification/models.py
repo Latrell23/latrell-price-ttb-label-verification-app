@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 Status = Literal["PASS", "FAIL"]
 OverallVerdict = Literal["APPROVED", "NEEDS_REVIEW"]
-BatchItemStatus = Literal["completed", "failed"]
+ReviewItemStatus = Literal["completed", "failed"]
 MatchType = Literal[
     "FUZZY",
     "COUNTRY_SYNONYM",
@@ -29,7 +29,7 @@ class ApplicationData(BaseModel):
 
 
 class ExtractedLabel(BaseModel):
-    """Vision-extracted label values read from the uploaded image."""
+    """Vision-extracted label values read from the review image."""
 
     brand_name: str | None
     class_type: str | None
@@ -50,6 +50,7 @@ class FieldResult(BaseModel):
     expected: str
     found: str | None
     status: Status
+    match_score: float
 
 
 class VerificationResult(BaseModel):
@@ -58,6 +59,7 @@ class VerificationResult(BaseModel):
     results: list[FieldResult]
     overall_verdict: OverallVerdict
     latency_ms: float
+    confidence_score: float
 
 
 class ErrorDetail(BaseModel):
@@ -75,8 +77,8 @@ class APIError(BaseModel):
     details: list[ErrorDetail]
 
 
-class BatchVerificationSummary(BaseModel):
-    """Aggregate counts for a batch verification response."""
+class ReviewVerificationSummary(BaseModel):
+    """Aggregate counts for a review queue response."""
 
     passed: int
     needs_review: int
@@ -85,26 +87,19 @@ class BatchVerificationSummary(BaseModel):
     total: int
 
 
-class BatchVerificationItem(BaseModel):
-    """Per-label batch verification outcome."""
+class ReviewVerificationItem(BaseModel):
+    """Per-label review outcome."""
 
     client_id: str
     file_name: str | None
-    status: BatchItemStatus
+    status: ReviewItemStatus
     result: VerificationResult | None
     error: APIError | None
 
 
-class BatchVerificationResponse(BaseModel):
-    """Batch verification API response with partial-result support."""
+class ReviewVerificationResponse(BaseModel):
+    """Review queue response with partial-result support."""
 
-    items: list[BatchVerificationItem]
-    summary: BatchVerificationSummary
+    items: list[ReviewVerificationItem]
+    summary: ReviewVerificationSummary
     latency_ms: float
-
-
-class BatchResult(BaseModel):
-    """Batch verification result with item details and aggregate counts."""
-
-    items: list[VerificationResult]
-    summary: dict[str, int]

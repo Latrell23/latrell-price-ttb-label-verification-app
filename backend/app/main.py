@@ -4,9 +4,11 @@ from time import perf_counter
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
+from app.review import REVIEW_IMAGE_DIR
 from app.routes.health import router as health_router
-from app.routes.verify import router as verify_router
+from app.routes.review import router as review_router
 from app.vision.dependencies import close_vision_service
 
 
@@ -46,8 +48,8 @@ async def lifespan(_app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    """Create and configure the TTB label verification API."""
-    app = FastAPI(title="TTB Label Verification API", lifespan=lifespan)
+    """Create and configure the TTB label reviewer API."""
+    app = FastAPI(title="TTB Label Reviewer API", lifespan=lifespan)
 
     # Configure browser access for the static frontend.
     allowed_origins = _allowed_origins(os.getenv("ALLOWED_ORIGINS"), os.getenv("APP_ENV"))
@@ -61,7 +63,12 @@ def create_app() -> FastAPI:
 
     # Register public API routes.
     app.include_router(health_router)
-    app.include_router(verify_router)
+    app.include_router(review_router)
+    app.mount(
+        "/review/assets",
+        StaticFiles(directory=str(REVIEW_IMAGE_DIR)),
+        name="review_assets",
+    )
 
     return app
 

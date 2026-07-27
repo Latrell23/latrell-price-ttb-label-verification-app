@@ -18,5 +18,7 @@ services:
         sync: false
       - key: OPENAI_REASONING_EFFORT
         sync: false
-      - key: MAX_BATCH_ITEMS
-        value: "5"
+      - key: MAX_REVIEW_CONCURRENCY
+        value: "3"
+      - key: REVIEW_TIMEOUT_SECONDS
+        value: "20"

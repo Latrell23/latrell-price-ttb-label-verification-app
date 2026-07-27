@@ -1,5 +1,6 @@
 import asyncio
 
+import httpx
 import pytest
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -15,7 +16,7 @@ def test_health_returns_readiness_payload(monkeypatch) -> None:
     body = asyncio.run(route.endpoint())
 
     assert body["status"] == "healthy"
-    assert body["service"] == "ttb-label-verification-api"
+    assert body["service"] == "ttb-label-reviewer-api"
     assert body["vision_configured"] is True
     assert "checked_at" in body
 
@@ -90,3 +91,35 @@ def test_app_lifespan_closes_shared_vision_service(monkeypatch) -> None:
     asyncio.run(run_lifespan())
 
     assert closed is True
+
+
+def test_app_exposes_only_health_and_review_api_routes() -> None:
+    app = create_app()
+    paths = set(app.openapi()["paths"])
+
+    assert paths == {
+        "/health",
+        "/review/labels",
+        "/review/labels/{label_id}/verify",
+        "/review/verify",
+    }
+    assert "/verify" not in paths
+    assert "/verify/batch" not in paths
+    assert "/verify/batch/stream" not in paths
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/verify", "/verify/batch", "/verify/batch/stream"],
+)
+def test_legacy_upload_endpoints_return_not_found(path: str) -> None:
+    async def post_legacy_path() -> httpx.Response:
+        transport = httpx.ASGITransport(app=create_app())
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://testserver",
+        ) as client:
+            return await client.post(path)
+
+    response = asyncio.run(post_legacy_path())
+    assert response.status_code == 404
