@@ -491,7 +491,7 @@ def test_preprocessor_does_not_upscale_small_images() -> None:
     assert processed.height == 200
 
 
-def test_preprocessor_accepts_heic_uploads() -> None:
+def test_preprocessor_accepts_heic_images() -> None:
     processed = ImagePreprocessor(max_long_edge=2048).process(
         heic_image_bytes((300, 200)),
         "image/heic",
@@ -503,12 +503,12 @@ def test_preprocessor_accepts_heic_uploads() -> None:
     assert processed.data[:2] == b"\xff\xd8"
 
 
-def test_preprocessor_default_max_edge_is_latency_optimized() -> None:
+def test_preprocessor_default_max_edge_preserves_label_readability() -> None:
     processed = ImagePreprocessor().process(image_bytes((3200, 2400)))
 
-    assert DEFAULT_JPEG_QUALITY == 80
-    assert processed.width == 1152
-    assert processed.height == 864
+    assert DEFAULT_JPEG_QUALITY == 85
+    assert processed.width == 1800
+    assert processed.height == 1350
 
 
 def test_invalid_image_bytes_raise_validation_error_without_api_call() -> None:

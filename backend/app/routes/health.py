@@ -17,7 +17,7 @@ async def health() -> dict[str, str | bool]:
     """Return a lightweight service health payload."""
     return {
         "status": "healthy",
-        "service": "ttb-label-verification-api",
+        "service": "ttb-label-reviewer-api",
         "environment": os.getenv("APP_ENV", "local"),
         "vision_configured": _vision_configured(),
         "checked_at": datetime.now(timezone.utc).isoformat(),

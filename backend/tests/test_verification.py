@@ -3,7 +3,6 @@ from app.verification import (
     ExtractedLabel,
     FieldResult,
     VerificationResult,
-    verify_batch,
     verify_label,
 )
 
@@ -68,12 +67,10 @@ def test_extracted_label_accepts_nullable_field_values() -> None:
     assert label.government_warning is None
 
 
-def test_verification_and_batch_results_serialize_expected_shapes() -> None:
+def test_verification_result_serializes_expected_shape() -> None:
     result = verify_label(application(), extracted())
-    batch = verify_batch([(application(), extracted())])
 
     serialized_result = result.model_dump()
-    serialized_batch = batch.model_dump()
 
     assert set(serialized_result) == {
         "results",
@@ -85,12 +82,6 @@ def test_verification_and_batch_results_serialize_expected_shapes() -> None:
     assert all("match_score" in item for item in serialized_result["results"])
     assert serialized_result["confidence_score"] == 1.0
     assert serialized_result["overall_verdict"] == "APPROVED"
-    assert set(serialized_batch) == {"items", "summary"}
-    assert serialized_batch["summary"] == {
-        "passed": 1,
-        "needs_review": 0,
-        "total": 1,
-    }
 
 
 def test_brand_passes_for_minor_ocr_typo_above_threshold() -> None:
@@ -496,18 +487,3 @@ def test_read_confidence_reflects_missing_core_fields() -> None:
     )
 
     assert result.confidence_score == 0.7143
-
-
-def test_batch_summary_counts_passed_needs_review_and_total() -> None:
-    batch = verify_batch(
-        [
-            (application(), extracted()),
-            (application(), extracted(brand_name="Wrong Brand")),
-        ]
-    )
-
-    assert batch.summary == {
-        "passed": 1,
-        "needs_review": 1,
-        "total": 2,
-    }

@@ -25,7 +25,7 @@ class ProcessedImage:
 
 
 class ImagePreprocessor:
-    """Convert uploaded images into bounded JPEG payloads for vision models."""
+    """Convert label images into bounded JPEG payloads for vision models."""
 
     def __init__(
         self,
@@ -85,7 +85,7 @@ class ImagePreprocessor:
 
 
 def _register_heif_opener() -> None:
-    """Register HEIC/HEIF support with Pillow before opening those uploads."""
+    """Register HEIC/HEIF support with Pillow before opening those images."""
     global _HEIF_OPENER_REGISTERED
     if _HEIF_OPENER_REGISTERED:
         return

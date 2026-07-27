@@ -1,26 +1,23 @@
-from app.verification.engine import verify_batch, verify_label
+from app.verification.engine import verify_label
 from app.verification.models import (
     APIError,
     ApplicationData,
-    BatchResult,
-    BatchVerificationItem,
-    BatchVerificationResponse,
-    BatchVerificationSummary,
     ExtractedLabel,
     FieldResult,
+    ReviewVerificationItem,
+    ReviewVerificationResponse,
+    ReviewVerificationSummary,
     VerificationResult,
 )
 
 __all__ = [
     "APIError",
     "ApplicationData",
-    "BatchResult",
-    "BatchVerificationItem",
-    "BatchVerificationResponse",
-    "BatchVerificationSummary",
     "ExtractedLabel",
     "FieldResult",
+    "ReviewVerificationItem",
+    "ReviewVerificationResponse",
+    "ReviewVerificationSummary",
     "VerificationResult",
-    "verify_batch",
     "verify_label",
 ]

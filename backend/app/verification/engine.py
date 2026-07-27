@@ -5,7 +5,6 @@ from time import perf_counter
 
 from app.verification.models import (
     ApplicationData,
-    BatchResult,
     ExtractedLabel,
     FieldResult,
     VerificationResult,
@@ -94,26 +93,6 @@ def verify_label(
         overall_verdict=verdict,
         latency_ms=latency_ms,
         confidence_score=confidence_score,
-    )
-
-
-def verify_batch(
-    pairs: list[tuple[ApplicationData, ExtractedLabel]]
-) -> BatchResult:
-    """Verify multiple application and label pairs and summarize their outcomes."""
-    # Reuse single-label verification so batch behavior stays consistent.
-    items = [verify_label(application, extracted) for application, extracted in pairs]
-
-    # Count final verdicts for the batch summary payload.
-    passed = sum(item.overall_verdict == "APPROVED" for item in items)
-    needs_review = sum(item.overall_verdict == "NEEDS_REVIEW" for item in items)
-    return BatchResult(
-        items=items,
-        summary={
-            "passed": passed,
-            "needs_review": needs_review,
-            "total": len(items),
-        },
     )
 
 

@@ -1,12 +1,22 @@
-You are helping build the TTB Label Verification proof-of-concept. Standing rules for the whole
-project: 1. Stack: Python 3.12 + FastAPI backend, React (or plain HTML/JS) frontend, a vision
-model for extraction, no database (stateless / in-memory). Deploy target: a free-tier host (e.g.
-Railway, or Vercel + Render). 2. Hard requirements that override convenience: single-label result
-in UNDER 5 SECONDS; UI usable by a non-technical 70+ user with no instructions; BATCH UPLOAD is
-required, not optional; the government warning is an EXACT, case-sensitive match while all other
-fields are fuzzy/normalized; API keys live in ENVIRONMENT VARIABLES ONLY — never hardcoded, never
-committed. 3. Working cadence: when I say PLAN, propose an approach and list files/risks but
-write NO code. When I say REVIEW, critique that plan against the requirements and edge cases and
-finalize it. When I say EXECUTE, implement exactly the approved plan with tests, then tell me how
-to verify it. Keep scope to the current phase only. 4. Prefer correctness and clean structure
-over ambition. Confirm you understand these rules.
+You are helping build the TTB Label Reviewer proof of concept.
+
+Standing rules for the whole project:
+
+1. Stack: Python 3.12 + FastAPI backend, plain HTML/CSS/JavaScript frontend,
+   OpenAI vision extraction, and no production database yet.
+2. Product scope: review backend-provided application JSON and label images.
+   Do not add image uploads, manual application forms, or multipart verification
+   endpoints.
+3. Reviewer flow: load the simulated queue, run AI review for one record or the
+   full queue, inspect field comparisons, then Accept or Flag and submit the
+   session-only decision.
+4. Government warning comparison uses the documented exact-match rule. Other
+   fields use their documented fuzzy or normalized rules.
+5. API keys live in environment variables only—never hardcoded or committed.
+6. The UI must be usable by a non-technical older adult without instructions.
+7. Keep the review API and UI accessible, reliable, and responsive. Queue-wide
+   review concurrency must remain bounded and configurable.
+8. Working cadence: PLAN proposes an approach without code; REVIEW critiques and
+   finalizes it; EXECUTE implements the approved plan with tests and verification.
+9. Prefer correctness and clean structure over ambition. Keep scope to the
+   current phase.

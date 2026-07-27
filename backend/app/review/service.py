@@ -8,14 +8,14 @@ from pathlib import Path
 
 from pydantic import BaseModel, ValidationError
 
-from app.api.batch import build_batch_response, max_batch_concurrency
 from app.api.errors import error_payload, vision_exception_error
 from app.api.timing import now_counter, now_ms_since
 from app.verification import (
     APIError,
     ApplicationData,
-    BatchVerificationItem,
-    BatchVerificationResponse,
+    ReviewVerificationItem,
+    ReviewVerificationResponse,
+    ReviewVerificationSummary,
     verify_label,
 )
 from app.vision import DEFAULT_TIMEOUT_SECONDS, VisionService, extract_label_with_timeout
@@ -25,6 +25,7 @@ REVIEW_FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures"
 REVIEW_LABELS_PATH = REVIEW_FIXTURE_DIR / "labels.json"
 REVIEW_IMAGE_DIR = REVIEW_FIXTURE_DIR / "images"
 DEFAULT_REVIEW_TIMEOUT_SECONDS = 20.0
+DEFAULT_MAX_REVIEW_CONCURRENCY = 3
 
 
 class ReviewLabelPublic(BaseModel):
@@ -88,11 +89,26 @@ def review_timeout_seconds() -> float:
     return max(DEFAULT_TIMEOUT_SECONDS, configured)
 
 
+def max_review_concurrency() -> int:
+    """Return the maximum number of concurrent AI reviews."""
+    try:
+        configured = int(
+            os.getenv(
+                "MAX_REVIEW_CONCURRENCY",
+                str(DEFAULT_MAX_REVIEW_CONCURRENCY),
+            )
+        )
+    except ValueError:
+        return DEFAULT_MAX_REVIEW_CONCURRENCY
+
+    return max(1, configured)
+
+
 async def verify_review_label(
     *,
     label: ReviewLabel,
     vision_service: VisionService,
-) -> BatchVerificationItem:
+) -> ReviewVerificationItem:
     """Verify one backend-owned review label image against its JSON fixture."""
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     try:
@@ -110,10 +126,10 @@ async def verify_review_queue(
     *,
     labels: list[ReviewLabel],
     vision_service: VisionService,
-) -> BatchVerificationResponse:
+) -> ReviewVerificationResponse:
     """Verify the full simulated review queue concurrently."""
     started_at = now_counter()
-    configured_max_concurrency = max_batch_concurrency()
+    configured_max_concurrency = max_review_concurrency()
     semaphore = asyncio.Semaphore(configured_max_concurrency)
     executor = concurrent.futures.ThreadPoolExecutor(
         max_workers=configured_max_concurrency
@@ -134,7 +150,25 @@ async def verify_review_queue(
     finally:
         executor.shutdown(wait=False, cancel_futures=True)
 
-    return build_batch_response(results=results, started_at=started_at)
+    passed = sum(
+        item.status == "completed"
+        and item.result is not None
+        and item.result.overall_verdict == "APPROVED"
+        for item in results
+    )
+    completed = sum(item.status == "completed" for item in results)
+    failed = len(results) - completed
+    return ReviewVerificationResponse(
+        items=results,
+        summary=ReviewVerificationSummary(
+            passed=passed,
+            needs_review=completed - passed,
+            completed=completed,
+            failed=failed,
+            total=len(results),
+        ),
+        latency_ms=now_ms_since(started_at),
+    )
 
 
 @lru_cache(maxsize=1)
@@ -172,11 +206,11 @@ async def _verify_review_label_with_executor(
     executor: concurrent.futures.ThreadPoolExecutor,
     deadline: float,
     semaphore: asyncio.Semaphore | None = None,
-) -> BatchVerificationItem:
+) -> ReviewVerificationItem:
     """Run the shared vision and comparison flow for one fixture label."""
     image_bytes, image_error = _read_review_image(label)
     if image_error is not None:
-        return BatchVerificationItem(
+        return ReviewVerificationItem(
             client_id=label.id,
             file_name=label.image_file,
             status="failed",
@@ -207,7 +241,7 @@ async def _verify_review_label_with_executor(
         result = verify_label(label.expected, extracted_label).model_copy(
             update={"latency_ms": now_ms_since(started_at)}
         )
-        return BatchVerificationItem(
+        return ReviewVerificationItem(
             client_id=label.id,
             file_name=label.image_file,
             status="completed",
@@ -215,7 +249,7 @@ async def _verify_review_label_with_executor(
             error=None,
         )
     except Exception as exception:
-        return BatchVerificationItem(
+        return ReviewVerificationItem(
             client_id=label.id,
             file_name=label.image_file,
             status="failed",

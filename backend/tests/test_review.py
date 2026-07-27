@@ -1,6 +1,7 @@
 import asyncio
 import json
 import time
+from threading import Lock
 
 from fastapi.responses import JSONResponse
 
@@ -10,6 +11,7 @@ from app.routes.review import (
     verify_review_queue_endpoint,
 )
 from app.verification import ExtractedLabel
+from app.vision import VisionAPIError, VisionConfigurationError
 
 
 WARNING = (
@@ -47,6 +49,46 @@ class ReviewVisionService:
         self.calls.append((image_bytes, content_type))
         self.deadlines.append(deadline)
         return self.label
+
+
+class ConcurrentReviewVisionService(ReviewVisionService):
+    def __init__(self) -> None:
+        super().__init__()
+        self.active = 0
+        self.max_active = 0
+        self.lock = Lock()
+
+    def extract_label(
+        self,
+        image_bytes: bytes,
+        content_type: str | None = None,
+        *,
+        deadline: float | None = None,
+    ) -> ExtractedLabel:
+        with self.lock:
+            self.active += 1
+            self.max_active = max(self.max_active, self.active)
+        try:
+            time.sleep(0.03)
+            return super().extract_label(
+                image_bytes,
+                content_type,
+                deadline=deadline,
+            )
+        finally:
+            with self.lock:
+                self.active -= 1
+
+
+class FailingReviewVisionService(ReviewVisionService):
+    def extract_label(
+        self,
+        image_bytes: bytes,
+        content_type: str | None = None,
+        *,
+        deadline: float | None = None,
+    ) -> ExtractedLabel:
+        raise VisionAPIError("provider unavailable")
 
 
 def response_status_and_body(response) -> tuple[int, dict]:
@@ -100,7 +142,7 @@ def test_verify_review_label_uses_review_timeout_budget(monkeypatch) -> None:
     assert service.deadlines[0] - time.monotonic() > 10
 
 
-def test_verify_review_queue_returns_batch_summary(monkeypatch) -> None:
+def test_verify_review_queue_returns_review_summary(monkeypatch) -> None:
     monkeypatch.setattr(
         "app.routes.review.get_vision_service",
         lambda: ReviewVisionService(),
@@ -112,3 +154,46 @@ def test_verify_review_queue_returns_batch_summary(monkeypatch) -> None:
     assert body["summary"]["total"] == 5
     assert body["summary"]["completed"] == 5
     assert body["summary"]["failed"] == 0
+
+
+def test_verify_review_queue_uses_configured_concurrency(monkeypatch) -> None:
+    service = ConcurrentReviewVisionService()
+    monkeypatch.setenv("MAX_REVIEW_CONCURRENCY", "2")
+    monkeypatch.setattr("app.routes.review.get_vision_service", lambda: service)
+
+    response = asyncio.run(verify_review_queue_endpoint())
+
+    assert response.summary.completed == 5
+    assert service.max_active == 2
+
+
+def test_verify_review_queue_reports_provider_failures(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.routes.review.get_vision_service",
+        lambda: FailingReviewVisionService(),
+    )
+
+    response = asyncio.run(verify_review_queue_endpoint())
+    body = response.model_dump()
+
+    assert body["summary"] == {
+        "passed": 0,
+        "needs_review": 0,
+        "completed": 0,
+        "failed": 5,
+        "total": 5,
+    }
+    assert all(item["error"]["code"] == "vision_extraction_failed" for item in body["items"])
+
+
+def test_verify_review_label_reports_unconfigured_vision(monkeypatch) -> None:
+    def unavailable_service():
+        raise VisionConfigurationError("missing configuration")
+
+    monkeypatch.setattr("app.routes.review.get_vision_service", unavailable_service)
+
+    response = asyncio.run(verify_review_label_endpoint("label-001"))
+    status_code, body = response_status_and_body(response)
+
+    assert status_code == 500
+    assert body["error"]["code"] == "vision_not_configured"

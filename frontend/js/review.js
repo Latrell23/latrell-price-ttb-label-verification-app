@@ -306,7 +306,7 @@ function createReviewResult(item) {
   }
 
   const summary = document.createElement("p");
-  summary.className = "batch-card-summary";
+  summary.className = "review-result-summary";
   const failedCount = failedFieldCount(item.result);
   summary.textContent =
     failedCount === 0
@@ -317,7 +317,7 @@ function createReviewResult(item) {
   section.append(createConfidenceMeter(item.result));
 
   const details = document.createElement("div");
-  details.className = "batch-drilldown";
+  details.className = "review-result-details";
   item.result.results.forEach((fieldResult) => {
     details.append(
       createFieldResultRow(fieldResult, {

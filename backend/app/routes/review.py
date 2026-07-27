@@ -10,7 +10,7 @@ from app.review import (
     verify_review_label,
     verify_review_queue,
 )
-from app.verification import BatchVerificationItem, BatchVerificationResponse
+from app.verification import ReviewVerificationItem, ReviewVerificationResponse
 from app.vision.dependencies import (
     get_vision_service,
     resolve_vision_service,
@@ -28,10 +28,10 @@ async def review_labels() -> ReviewLabelList:
     )
 
 
-@router.post("/labels/{label_id}/verify", response_model=BatchVerificationItem)
+@router.post("/labels/{label_id}/verify", response_model=ReviewVerificationItem)
 async def verify_review_label_endpoint(
     label_id: str,
-) -> BatchVerificationItem | JSONResponse:
+) -> ReviewVerificationItem | JSONResponse:
     """Verify one simulated review label against its backend JSON."""
     label = get_review_label(label_id)
     if label is None:
@@ -52,8 +52,8 @@ async def verify_review_label_endpoint(
     )
 
 
-@router.post("/verify", response_model=BatchVerificationResponse)
-async def verify_review_queue_endpoint() -> BatchVerificationResponse | JSONResponse:
+@router.post("/verify", response_model=ReviewVerificationResponse)
+async def verify_review_queue_endpoint() -> ReviewVerificationResponse | JSONResponse:
     """Verify every simulated review label in the backend queue."""
     vision_service, vision_error = _review_vision_service()
     if vision_error is not None:
